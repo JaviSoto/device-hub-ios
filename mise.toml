@@ -10,6 +10,7 @@ swiftformat = "0.62.1"
 swiftlint = "0.63.2"
 uv = "0.11.7"
 xcodegen = "2.45.4"
+yq = "4.53.2"
 "github:cameroncooke/AXe" = { version = "1.8.0", matching = "AXe-macOS-v1.8.0-universal.tar.gz" }
 "npm:jscpd" = "4.0.9"
 
@@ -29,8 +30,12 @@ run = "xcodegen generate"
 description = "Build the app"
 run = [
   { task = "protocol:build" },
-  "Scripts/build-app.sh",
+  { task = "build:app" },
 ]
+
+[tasks."build:app"]
+description = "Build the iOS app from an existing protocol XCFramework"
+run = "Scripts/build-app.sh"
 
 [tasks.archive]
 description = "Create an app archive using local signing settings"
@@ -113,7 +118,3 @@ run = "Scripts/verify-protocol-xcframework.sh"
 [tasks.ci]
 description = "Run the complete local verification suite"
 run = "ci/run_ci.sh"
-
-[tasks."ci:hosted"]
-description = "Run source-level checks supported by GitHub's hosted macOS image"
-run = "ci/run_hosted_ci.sh"

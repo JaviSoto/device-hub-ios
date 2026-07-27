@@ -21,6 +21,12 @@ fast repository checks; product changes run the complete Swift and Rust test,
 source-check, generated-project, app-build, and visual validation suite. Set
 `DEVICE_HUB_FULL_CI=1` to force every gate locally.
 
+GitHub Actions uses one Xcode 27 runner and one checkout. Shared project and
+protocol generation run first; independent lint, test, verification, and
+unsigned Release-build steps then run concurrently with separate logs. Pull
+requests targeting `main` use the same workflow. Workflows from external forks
+require maintainer approval before they run.
+
 ## Regression strategy
 
 For a reproducible defect:

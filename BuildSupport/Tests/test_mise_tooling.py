@@ -14,6 +14,7 @@ class MiseToolingContractTests(unittest.TestCase):
 
         self.assertIn("ripgrep", tools)
         self.assertIn("shellcheck", tools)
+        self.assertIn("yq", tools)
 
     def test_complete_test_task_runs_native_media_once(self) -> None:
         configuration = tomllib.loads((ROOT / "mise.toml").read_text())

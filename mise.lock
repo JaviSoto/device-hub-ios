@@ -100,3 +100,13 @@ backend = "aqua:yonaskolb/XcodeGen"
 checksum = "sha256:090ec29491aad50aec10631bf6e62253fed733c50f3aab0f5ffc86bc170bdbef"
 url = "https://github.com/yonaskolb/XcodeGen/releases/download/2.45.4/xcodegen.zip"
 url_api = "https://api.github.com/repos/yonaskolb/XcodeGen/releases/assets/396214908"
+
+[[tools.yq]]
+version = "4.53.2"
+backend = "aqua:mikefarah/yq"
+
+[tools.yq."platforms.macos-arm64"]
+checksum = "sha256:541ba2287560df70f561955e2d7f7e1cd00cf2a15a884f6b5c87a4bfa887bc07"
+url = "https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_darwin_arm64"
+url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/398368449"
+provenance = "cosign"
