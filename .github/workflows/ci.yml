@@ -46,6 +46,12 @@ jobs:
               DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-rust.lock
             run: mise run test:rust
 
+          - name: Test Swift packages
+            env:
+              DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-swift.lock
+              SWIFT_SCRATCH_PATH: ${{ runner.temp }}/DeviceHubSwiftTests
+            run: mise run test:swift
+
           - name: Test native media boundary
             env:
               DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-media.lock

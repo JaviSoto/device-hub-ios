@@ -64,6 +64,7 @@ class CIWorkflowContractTests(unittest.TestCase):
                 "mise run test:support",
                 "mise run lint:shell",
                 "mise run test:rust",
+                "mise run test:swift",
                 "mise run test:media",
                 "mise run protocol:verify",
                 "mise run build:app",
@@ -77,6 +78,11 @@ class CIWorkflowContractTests(unittest.TestCase):
         self.assertEqual("NO", app_build["env"]["CODE_SIGNING_ALLOWED"])
         self.assertIn("DERIVED_DATA_PATH", app_build["env"])
 
+        swift_tests = next(
+            step for step in parallel_steps if step["run"] == "mise run test:swift"
+        )
+        self.assertIn("SWIFT_SCRATCH_PATH", swift_tests["env"])
+
     def test_parallel_heavy_steps_use_independent_process_guards(self) -> None:
         workflow = load_workflow()
         job = next(iter(workflow["jobs"].values()))
@@ -85,6 +91,7 @@ class CIWorkflowContractTests(unittest.TestCase):
         )
         guarded_commands = {
             "mise run test:rust",
+            "mise run test:swift",
             "mise run test:media",
             "mise run protocol:verify",
             "mise run build:app",
