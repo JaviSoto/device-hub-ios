@@ -103,7 +103,7 @@ public actor HEVCVideoDecoder {
             timescale: 1_000_000
         )
         nextPresentationTimeValue &+= 1
-        let sampleBuffer = makeSampleBuffer(
+        let sampleBuffer = try makeSampleBuffer(
             from: input.sample,
             formatDescription: pipeline.formatDescription,
             presentationTime: presentationTime
@@ -133,15 +133,13 @@ public actor HEVCVideoDecoder {
             metadata: metadata,
             shouldTrace: shouldTrace
         )
-        let status = sampleBuffer.withUnsafeSampleBuffer { rawSampleBuffer in
-            VTDecompressionSessionDecodeFrame(
-                pipeline.session,
-                sampleBuffer: rawSampleBuffer,
-                flags: asynchronousDecompressionFlag,
-                infoFlagsOut: &infoFlags,
-                completionHandler: completion
-            )
-        }
+        let status = VTDecompressionSessionDecodeFrame(
+            pipeline.session,
+            sampleBuffer: sampleBuffer,
+            flags: asynchronousDecompressionFlag,
+            infoFlagsOut: &infoFlags,
+            completionHandler: completion
+        )
         guard status == noErr else {
             DeviceHubMediaTrace.emit(
                 "decoder_submit_failed status=\(status)"
@@ -415,25 +413,72 @@ private func makeSampleBuffer(
     from sample: HEVCCompressedSample,
     formatDescription: CMVideoFormatDescription,
     presentationTime: CMTime
-) -> CMReadySampleBuffer<CMReadOnlyDataBlockBuffer> {
-    var attachments = CMSampleBuffer.SampleAttachments()
-    attachments.isNotSync = !sample.isSync
-    let properties = CMSampleBuffer.SamplePropertiesCollection([
-        .init(
-            size: sample.bytes.count,
-            timing: CMSampleTimingInfo(
-                duration: .invalid,
-                presentationTimeStamp: presentationTime,
-                decodeTimeStamp: .invalid
-            ),
-            attachments: attachments
-        )
-    ])
-    return CMReadySampleBuffer(
-        dataBuffer: CMReadOnlyDataBlockBuffer(sample.bytes),
-        formatDescription: formatDescription,
-        sampleProperties: properties
+) throws -> CMSampleBuffer {
+    var blockBuffer: CMBlockBuffer?
+    var status = CMBlockBufferCreateWithMemoryBlock(
+        allocator: kCFAllocatorDefault,
+        memoryBlock: nil,
+        blockLength: sample.bytes.count,
+        blockAllocator: kCFAllocatorDefault,
+        customBlockSource: nil,
+        offsetToData: 0,
+        dataLength: sample.bytes.count,
+        flags: 0,
+        blockBufferOut: &blockBuffer
     )
+    guard status == noErr, let blockBuffer else {
+        throw mediaSystemError(operation: .submitFrame, status: status)
+    }
+
+    status = sample.bytes.withUnsafeBytes { bytes in
+        CMBlockBufferReplaceDataBytes(
+            with: bytes.baseAddress!,
+            blockBuffer: blockBuffer,
+            offsetIntoDestination: 0,
+            dataLength: bytes.count
+        )
+    }
+    guard status == noErr else {
+        throw mediaSystemError(operation: .submitFrame, status: status)
+    }
+
+    var timing = CMSampleTimingInfo(
+        duration: .invalid,
+        presentationTimeStamp: presentationTime,
+        decodeTimeStamp: .invalid
+    )
+    var sampleSize = sample.bytes.count
+    var sampleBuffer: CMSampleBuffer?
+    status = CMSampleBufferCreateReady(
+        allocator: kCFAllocatorDefault,
+        dataBuffer: blockBuffer,
+        formatDescription: formatDescription,
+        sampleCount: 1,
+        sampleTimingEntryCount: 1,
+        sampleTimingArray: &timing,
+        sampleSizeEntryCount: 1,
+        sampleSizeArray: &sampleSize,
+        sampleBufferOut: &sampleBuffer
+    )
+    guard status == noErr, let sampleBuffer else {
+        throw mediaSystemError(operation: .submitFrame, status: status)
+    }
+
+    if !sample.isSync {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer,
+            createIfNecessary: true
+        ) as? [NSMutableDictionary],
+            let attachment = attachments.first
+        else {
+            throw MediaDecoderError.systemFailure(
+                .submitFrame,
+                .allocationFailed
+            )
+        }
+        attachment[kCMSampleAttachmentKey_NotSync] = true
+    }
+    return sampleBuffer
 }
 
 /// Synchronizes the single C callback boundary and owns stream completion.
