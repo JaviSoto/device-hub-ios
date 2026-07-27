@@ -7,81 +7,33 @@ PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 source "$PROCESS_GUARD"
 devicehub_require_guard test-app 1800 "$0" "$@"
 
+# shellcheck source=BuildSupport/simulator_guard.sh
+source "$ROOT/BuildSupport/simulator_guard.sh"
+devicehub_require_simulator device-hub-test-app 1800 "$0" "$@"
+
 RUN_ROOT="$(mktemp -d "${TMPDIR:-/private/tmp}/device-hub-app-tests.XXXXXX")"
 DERIVED_DATA_PATH="$RUN_ROOT/DerivedData"
 SNAPSHOT_DERIVED_DATA_PATH="$RUN_ROOT/SnapshotDerivedData"
 ACCESSIBILITY_JSON="$RUN_ROOT/accessibility.json"
-SIMULATOR_UDID="${CI_SIMULATOR_UDID:-}"
-CREATED_SIMULATOR=0
+SIMULATOR_UDID="${DEVICE_HUB_SIMULATOR_UDID:?simulator lease did not provide a UDID}"
 RECORD_SNAPSHOTS="${DEVICE_HUB_RECORD_SNAPSHOTS:-0}"
 
 # Invoked by the EXIT trap below.
 # shellcheck disable=SC2329
 cleanup() {
   local status=$?
-  if [[ "$CREATED_SIMULATOR" == "1" && -n "$SIMULATOR_UDID" ]]; then
-    xcrun simctl shutdown "$SIMULATOR_UDID" >/dev/null 2>&1 || true
-    xcrun simctl delete "$SIMULATOR_UDID" >/dev/null 2>&1 || true
+  if ! rm -rf "$RUN_ROOT"; then
+    status=1
   fi
-  rm -rf "$RUN_ROOT"
+  if ! devicehub_cleanup_simulator; then
+    status=125
+  fi
   return "$status"
 }
 trap cleanup EXIT
 
-latest_ios_runtime() {
-  xcrun simctl list runtimes --json | python3 -c '
-import json
-import sys
-
-runtimes = json.load(sys.stdin).get("runtimes", [])
-candidates = [
-    runtime
-    for runtime in runtimes
-    if runtime.get("isAvailable")
-    and str(runtime.get("identifier", "")).startswith(
-        "com.apple.CoreSimulator.SimRuntime.iOS-27-"
-    )
-]
-if not candidates:
-    raise SystemExit("No available iOS 27 simulator runtime")
-print(sorted(candidates, key=lambda runtime: runtime["identifier"])[-1]["identifier"])
-'
-}
-
-preferred_iphone_type() {
-  xcrun simctl list devicetypes --json | python3 -c '
-import json
-import sys
-
-devices = json.load(sys.stdin).get("devicetypes", [])
-iphones = [device for device in devices if str(device.get("name", "")).startswith("iPhone ")]
-preferred = next(
-    (device for device in iphones if device.get("name") == "iPhone 17 Pro"),
-    None,
-)
-selected = preferred or (iphones[-1] if iphones else None)
-if selected is None:
-    raise SystemExit("No iPhone simulator device type")
-print(selected["identifier"])
-'
-}
-
-if [[ -z "$SIMULATOR_UDID" ]]; then
-  SIMULATOR_UDID="$(
-    xcrun simctl create \
-      "Device Hub Tests $$" \
-      "$(preferred_iphone_type)" \
-      "$(latest_ios_runtime)"
-  )"
-  CREATED_SIMULATOR=1
-fi
-
-xcrun simctl boot "$SIMULATOR_UDID" >/dev/null 2>&1 || true
-xcrun simctl bootstatus "$SIMULATOR_UDID" -b
-
 cd "$ROOT"
-CI_SIMULATOR_UDID="$SIMULATOR_UDID" \
-  Sources/DeviceHubPrivateMedia/Tests/run-tests.sh
+Sources/DeviceHubPrivateMedia/Tests/run-tests.sh
 
 DESTINATION="platform=iOS Simulator,id=$SIMULATOR_UDID" \
 DERIVED_DATA_PATH="$DERIVED_DATA_PATH" \

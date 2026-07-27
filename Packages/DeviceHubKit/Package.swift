@@ -7,7 +7,7 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [
         .iOS(.v27),
-        .macOS(.v27)
+        .macOS(.v26)
     ],
     products: [
         .library(name: "DeviceHubCore", targets: ["DeviceHubCore"]),

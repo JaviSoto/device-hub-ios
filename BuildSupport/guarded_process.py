@@ -79,6 +79,18 @@ class ProcessSessionMember:
     executable_path: Path
 
 
+@dataclass
+class WatchdogSupervision:
+    """Require callers to explicitly attest that owned cleanup was verified."""
+
+    cleanup_verified: bool = False
+
+    def mark_cleanup_verified(self) -> None:
+        """Allow the watcher to stand down after the caller proves cleanup."""
+
+        self.cleanup_verified = True
+
+
 def bounded_seconds(value: str, *, maximum: float, label: str) -> float:
     """Parse a positive finite duration capped at the supplied maximum."""
 
@@ -715,12 +727,12 @@ def parent_death_watchdog(
     process_session_id: int,
     *,
     grace_seconds: float,
-) -> Iterator[None]:
+) -> Iterator[WatchdogSupervision]:
     """Keep an independent parent-death watcher for the process session."""
 
     read_descriptor, write_descriptor = os.pipe()
     watchdog: subprocess.Popen[bytes] | None = None
-    completed_normally = False
+    supervision = WatchdogSupervision()
     try:
         watchdog = subprocess.Popen(
             [
@@ -743,8 +755,7 @@ def parent_death_watchdog(
         )
         os.close(read_descriptor)
         read_descriptor = -1
-        yield
-        completed_normally = True
+        yield supervision
     finally:
         supervision_error: OSError | None = None
         if read_descriptor >= 0:
@@ -752,7 +763,7 @@ def parent_death_watchdog(
                 os.close(read_descriptor)
             except OSError as error:
                 supervision_error = error
-        if completed_normally:
+        if supervision.cleanup_verified:
             try:
                 written = os.write(
                     write_descriptor,
@@ -855,7 +866,7 @@ def run_guarded(configuration: GuardConfiguration) -> int:
                     with parent_death_watchdog(
                         process.pid,
                         grace_seconds=configuration.grace_seconds,
-                    ):
+                    ) as supervision:
                         try:
                             return_code = process.wait(
                                 timeout=configuration.timeout_seconds
@@ -879,11 +890,14 @@ def run_guarded(configuration: GuardConfiguration) -> int:
                                     "were terminated.",
                                     file=sys.stderr,
                                 )
+                                if cleaned:
+                                    supervision.mark_cleanup_verified()
                                 return (
                                     RESIDUAL_PROCESS_EXIT_STATUS
                                     if cleaned
                                     else CLEANUP_FAILURE_EXIT_STATUS
                                 )
+                            supervision.mark_cleanup_verified()
                             if return_code < 0:
                                 return 128 + abs(return_code)
                             return return_code
@@ -899,6 +913,8 @@ def run_guarded(configuration: GuardConfiguration) -> int:
                                 "its process session was terminated.",
                                 file=sys.stderr,
                             )
+                            if cleaned:
+                                supervision.mark_cleanup_verified()
                             return (
                                 TIMEOUT_EXIT_STATUS
                                 if cleaned
@@ -912,19 +928,21 @@ def run_guarded(configuration: GuardConfiguration) -> int:
                                 ),
                                 grace_seconds=configuration.grace_seconds,
                             )
+                            if cleaned:
+                                supervision.mark_cleanup_verified()
                             return (
                                 128 + termination.signal_number
                                 if cleaned
                                 else CLEANUP_FAILURE_EXIT_STATUS
                             )
-                except OSError:
+                except OSError as error:
                     cleaned = terminate_process_session(
                         process,
                         initial_signal=signal.SIGTERM,
                         grace_seconds=configuration.grace_seconds,
                     )
                     print(
-                        f"Could not supervise {configuration.name}.",
+                        f"Could not supervise {configuration.name}: {error}.",
                         file=sys.stderr,
                     )
                     return CLEANUP_FAILURE_EXIT_STATUS

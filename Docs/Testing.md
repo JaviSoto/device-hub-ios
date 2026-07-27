@@ -27,6 +27,29 @@ unsigned Release-build steps then run concurrently with separate logs. Pull
 requests targeting `main` use the same workflow. Workflows from external forks
 require maintainer approval before they run.
 
+## Simulator ownership
+
+`mise run test:app`, `mise run test:media`, and snapshot recording delegate
+local simulator ownership to the host-wide `codex-simulator-lease` supervisor
+when it is installed. The supervisor serializes simulator work across
+repositories, records the exact UUID before boot, terminates the complete
+workload process group, and does not release ownership until shutdown and
+deletion are verified.
+
+Exit status `75` means another simulator workflow owns the host. Status `125`
+means cleanup could not be proven. After an aborted, detached, timed-out, or
+signal-terminated run, do not retry the test command. First run:
+
+```sh
+codex-simulator-lease reap
+codex-simulator-lease status --json
+```
+
+The reaper targets only the registered UUID and retains durable state when
+cleanup cannot be verified. Isolated environments without the shared
+supervisor, including GitHub-hosted runners, use one stable managed simulator
+name and verified exact-device teardown.
+
 ## Regression strategy
 
 For a reproducible defect:

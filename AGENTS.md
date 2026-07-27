@@ -44,6 +44,14 @@ contributors.
 
 - Run only one heavyweight build, test, archive, simulator, or device
   operation at a time.
+- Route local simulator work through `codex-simulator-lease`; the repository
+  harness detects and uses that host-wide supervisor automatically. Never
+  bypass it in an agent session or replace it with a per-repository lock.
+- Treat detached, aborted, timed-out, or signal-terminated simulator commands
+  as unresolved. Do not retry until `codex-simulator-lease status --json`
+  reports inactive after a successful `codex-simulator-lease reap`.
+- Do not create, boot, shut down, or delete simulators directly from another
+  test script.
 - Do not leave detached processes, background jobs, simulators, or device
   sessions running after a task.
 - Bound reverse-engineering commands by image, address range, runtime, and

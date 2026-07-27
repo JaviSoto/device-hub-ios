@@ -203,13 +203,49 @@ class GuardedProcessTests(unittest.TestCase):
                 with guarded_process.parent_death_watchdog(
                     424242,
                     grace_seconds=0.1,
-                ):
-                    pass
+                ) as supervision:
+                    supervision.mark_cleanup_verified()
 
             with self.assertRaises(OSError):
                 os.fstat(read_descriptor)
             with self.assertRaises(OSError):
                 os.fstat(write_descriptor)
+            watchdog.wait.assert_called_once()
+        finally:
+            for descriptor in (read_descriptor, write_descriptor):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+    def test_parent_watchdog_requires_explicit_cleanup_verification(self) -> None:
+        read_descriptor, write_descriptor = os.pipe()
+        watchdog = mock.Mock()
+        watchdog.wait.return_value = 0
+        try:
+            with (
+                mock.patch.object(
+                    guarded_process.os,
+                    "pipe",
+                    return_value=(read_descriptor, write_descriptor),
+                ),
+                mock.patch.object(
+                    guarded_process.subprocess,
+                    "Popen",
+                    return_value=watchdog,
+                ),
+                mock.patch.object(
+                    guarded_process.os,
+                    "write",
+                ) as write_completion,
+            ):
+                with guarded_process.parent_death_watchdog(
+                    424242,
+                    grace_seconds=0.1,
+                ):
+                    pass
+
+            write_completion.assert_not_called()
             watchdog.wait.assert_called_once()
         finally:
             for descriptor in (read_descriptor, write_descriptor):
@@ -243,8 +279,8 @@ class GuardedProcessTests(unittest.TestCase):
                 with guarded_process.parent_death_watchdog(
                     424242,
                     grace_seconds=0.1,
-                ):
-                    pass
+                ) as supervision:
+                    supervision.mark_cleanup_verified()
 
             write_completion.assert_called_once_with(
                 write_descriptor,
@@ -329,8 +365,8 @@ class GuardedProcessTests(unittest.TestCase):
                 with guarded_process.parent_death_watchdog(
                     424242,
                     grace_seconds=0.1,
-                ):
-                    pass
+                ) as supervision:
+                    supervision.mark_cleanup_verified()
 
             watchdog.wait.assert_called_once()
         finally:
@@ -369,8 +405,8 @@ class GuardedProcessTests(unittest.TestCase):
                 with guarded_process.parent_death_watchdog(
                     424242,
                     grace_seconds=0.1,
-                ):
-                    pass
+                ) as supervision:
+                    supervision.mark_cleanup_verified()
 
             with self.assertRaises(OSError):
                 os.fstat(read_descriptor)

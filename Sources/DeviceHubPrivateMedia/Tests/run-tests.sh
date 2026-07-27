@@ -10,27 +10,32 @@ process_guard="$repository_root/BuildSupport/process_guard.sh"
 source "$process_guard"
 devicehub_require_guard private-media-tests 900 "$0" "$@"
 
+ROOT="$repository_root"
+# shellcheck source=BuildSupport/simulator_guard.sh
+source "$repository_root/BuildSupport/simulator_guard.sh"
+devicehub_require_simulator device-hub-private-media-tests 900 "$0" "$@"
+
 temp_root=${TMPDIR:-/tmp}
 work_dir=$(mktemp -d "$temp_root/devicehub-private-media.XXXXXX")
-created_simulator_udid=
-booted_simulator_udid=
+simulator_udid=${DEVICE_HUB_SIMULATOR_UDID:?simulator lease did not provide a UDID}
 
 cleanup() {
-  if [[ -n "$created_simulator_udid" ]]; then
-    xcrun simctl shutdown "$created_simulator_udid" >/dev/null 2>&1 || true
-    xcrun simctl delete "$created_simulator_udid" >/dev/null 2>&1 || true
-  elif [[ -n "$booted_simulator_udid" ]]; then
-    xcrun simctl shutdown "$booted_simulator_udid" >/dev/null 2>&1 || true
-  fi
-
+  local status=$?
   case "$work_dir" in
     "$temp_root"/devicehub-private-media.*)
-      rm -rf -- "$work_dir"
+      if ! rm -rf -- "$work_dir"; then
+        status=1
+      fi
       ;;
     *)
       printf 'Refusing to remove unexpected work directory: %s\n' "$work_dir" >&2
+      status=1
       ;;
   esac
+  if ! devicehub_cleanup_simulator; then
+    status=125
+  fi
+  return "$status"
 }
 trap cleanup EXIT
 
@@ -83,27 +88,6 @@ xcrun --sdk iphoneos clang++ \
   "${common_sources[@]}" \
   "$module_dir/Probe/main.mm" \
   -o "$work_dir/DeviceHubPrivateMediaDeviceProbe"
-
-simulator_udid=${CI_SIMULATOR_UDID:-}
-if [[ -z "$simulator_udid" ]]; then
-  simulator_udid=$(xcrun simctl create \
-    "DeviceHub Private Media Probe $$" \
-    com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro \
-    com.apple.CoreSimulator.SimRuntime.iOS-27-0)
-  created_simulator_udid=$simulator_udid
-elif ! xcrun simctl list devices available | grep -Fq "$simulator_udid"; then
-  printf 'CI_SIMULATOR_UDID is not an available simulator: %s\n' \
-    "$simulator_udid" >&2
-  exit 1
-fi
-
-if ! xcrun simctl list devices | grep -F "$simulator_udid" | grep -Fq '(Booted)'; then
-  xcrun simctl boot "$simulator_udid"
-  if [[ -z "$created_simulator_udid" ]]; then
-    booted_simulator_udid=$simulator_udid
-  fi
-fi
-xcrun simctl bootstatus "$simulator_udid" -b
 
 simulator_runtime_version=$(
   xcrun simctl getenv "$simulator_udid" SIMULATOR_RUNTIME_VERSION
