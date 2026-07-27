@@ -32,6 +32,35 @@ class MiseToolingContractTests(unittest.TestCase):
 
         self.assertEqual(1, script.count("mise run protocol:verify"))
 
+    def test_lint_task_delegates_to_atomic_mise_tasks(self) -> None:
+        configuration = tomllib.loads((ROOT / "mise.toml").read_text())
+        steps = configuration["tasks"]["lint"]["run"]
+        task_names = [step["task"] for step in steps]
+
+        self.assertEqual(
+            [
+                "format:check",
+                "lint:swift",
+                "lint:shell",
+                "lint:duplication",
+                "generate",
+                "lint:dead-code",
+            ],
+            task_names,
+        )
+
+    def test_protocol_build_delegates_to_atomic_mise_tasks(self) -> None:
+        configuration = tomllib.loads((ROOT / "mise.toml").read_text())
+        steps = configuration["tasks"]["protocol:build"]["run"]
+
+        self.assertEqual(
+            [
+                {"task": "protocol:bootstrap"},
+                {"task": "protocol:xcframework"},
+            ],
+            steps,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

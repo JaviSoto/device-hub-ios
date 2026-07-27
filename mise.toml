@@ -17,7 +17,6 @@ yq = "4.53.2"
 [tasks.setup]
 description = "Prepare dependencies and generated build inputs"
 run = [
-  "python3 BuildSupport/bootstrap_idevice.py",
   { task = "protocol:build" },
   { task = "generate" },
 ]
@@ -30,11 +29,12 @@ run = "xcodegen generate"
 description = "Build the app"
 run = [
   { task = "protocol:build" },
+  { task = "generate" },
   { task = "build:app" },
 ]
 
 [tasks."build:app"]
-description = "Build the iOS app from an existing protocol XCFramework"
+description = "Build the iOS app from generated project and protocol artifacts"
 run = "Scripts/build-app.sh"
 
 [tasks.archive]
@@ -77,15 +77,39 @@ run = "Scripts/test-app.sh"
 
 [tasks.lint]
 description = "Run formatting, lint, duplication, and dead-code checks"
-run = "Scripts/lint.sh"
+run = [
+  { task = "format:check" },
+  { task = "lint:swift" },
+  { task = "lint:shell" },
+  { task = "lint:duplication" },
+  { task = "generate" },
+  { task = "lint:dead-code" },
+]
 
-[tasks."lint:source"]
-description = "Run source-only formatting, lint, and duplication checks"
-run = "Scripts/lint-source.sh"
+[tasks."format:check"]
+description = "Check Swift formatting"
+run = "swiftformat Packages Sources Tools --config .swiftformat --lint"
+
+[tasks."lint:swift"]
+description = "Lint Swift source"
+run = "swiftlint lint --config .swiftlint.yml --strict"
 
 [tasks."lint:shell"]
 description = "Validate repository shell entry points"
 run = "Scripts/lint-shell.sh"
+
+[tasks."lint:duplication"]
+description = "Detect duplicate Swift source"
+run = """
+jscpd --config jscpd.json \
+  Packages/DeviceHubKit/Sources \
+  Sources \
+  Tools/DeviceHubPreviewRenderer/Sources
+"""
+
+[tasks."lint:dead-code"]
+description = "Detect unused Swift code in an existing generated project"
+run = "Scripts/lint-dead-code.sh"
 
 [tasks.previews]
 description = "Render the deterministic visual review matrix"
@@ -98,8 +122,8 @@ run = "DEVICE_HUB_RECORD_SNAPSHOTS=1 Scripts/test-app.sh"
 [tasks."protocol:build"]
 description = "Build the Rust protocol XCFramework"
 run = [
-  "python3 BuildSupport/bootstrap_idevice.py",
-  "Scripts/build-protocol-xcframework.sh",
+  { task = "protocol:bootstrap" },
+  { task = "protocol:xcframework" },
 ]
 sources = [
   "BuildSupport/bootstrap_idevice.py",
@@ -110,6 +134,14 @@ sources = [
   "Vendor/patches/idevice-device-hub.patch",
 ]
 outputs = ["Rust/Artifacts/DeviceHubFFI.xcframework/Info.plist"]
+
+[tasks."protocol:bootstrap"]
+description = "Fetch and patch the pinned idevice dependency"
+run = "python3 BuildSupport/bootstrap_idevice.py"
+
+[tasks."protocol:xcframework"]
+description = "Compile the Rust protocol XCFramework"
+run = "Scripts/build-protocol-xcframework.sh"
 
 [tasks."protocol:verify"]
 description = "Verify the packaged Rust protocol boundary"

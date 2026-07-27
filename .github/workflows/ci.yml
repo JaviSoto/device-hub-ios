@@ -28,44 +28,81 @@ jobs:
       - name: Install project tools
         uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
 
-      - name: Lint Swift and source
-        run: mise run lint:source
-
-      - name: Build protocol bridge
-        run: mise run protocol:build
-
       - name: Test build tooling
         run: mise run test:support
+
+      - name: Bootstrap protocol dependency
+        run: mise run protocol:bootstrap
+
+      - name: Build protocol XCFramework
+        run: mise run protocol:xcframework
 
       - name: Test native media boundary
         env:
           DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-media.lock
         run: mise run test:media
 
-      - parallel:
-          - name: Lint shell scripts
-            run: mise run lint:shell
+      - name: Generate Xcode project
+        run: mise run generate
 
-          - name: Test Rust protocol
-            env:
-              DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-rust.lock
-            run: mise run test:rust
+      - name: Check Swift formatting
+        id: swift-format
+        run: mise run format:check
+        background: true
 
-          - name: Test Swift packages
-            env:
-              DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-swift.lock
-              SWIFT_SCRATCH_PATH: ${{ runner.temp }}/DeviceHubSwiftTests
-            run: mise run test:swift
+      - name: Lint Swift
+        id: swift-lint
+        run: mise run lint:swift
+        background: true
 
-          - name: Verify protocol bridge
-            env:
-              DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-verify-protocol.lock
-            run: mise run protocol:verify
+      - name: Lint shell scripts
+        id: shell-lint
+        run: mise run lint:shell
+        background: true
 
-          - name: Build iOS app
-            env:
-              DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-build-app.lock
-              CONFIGURATION: Release
-              CODE_SIGNING_ALLOWED: "NO"
-              DERIVED_DATA_PATH: ${{ runner.temp }}/DeviceHubDerivedData
-            run: mise run build:app
+      - name: Detect duplicate code
+        id: duplication
+        run: mise run lint:duplication
+        background: true
+
+      - name: Detect dead code
+        id: dead-code
+        env:
+          DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-dead-code.lock
+        run: mise run lint:dead-code
+        background: true
+
+      - name: Test Rust protocol
+        id: rust-tests
+        env:
+          DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-rust.lock
+        run: mise run test:rust
+        background: true
+
+      - name: Test Swift packages
+        id: swift-tests
+        env:
+          DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-swift.lock
+          SWIFT_SCRATCH_PATH: ${{ runner.temp }}/DeviceHubSwiftTests
+        run: mise run test:swift
+        background: true
+
+      - name: Verify protocol bridge
+        id: protocol-verification
+        env:
+          DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-verify-protocol.lock
+        run: mise run protocol:verify
+        background: true
+
+      - name: Build iOS app
+        id: ios-app-build
+        env:
+          DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-build-app.lock
+          CONFIGURATION: Release
+          CODE_SIGNING_ALLOWED: "NO"
+          DERIVED_DATA_PATH: ${{ runner.temp }}/DeviceHubDerivedData
+        run: mise run build:app
+        background: true
+
+      - name: Wait for parallel checks
+        wait-all:

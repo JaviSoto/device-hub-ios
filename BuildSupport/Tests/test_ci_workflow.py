@@ -42,77 +42,95 @@ class CIWorkflowContractTests(unittest.TestCase):
         self.assertEqual(1, sum("actions/checkout@" in action for action in uses))
         self.assertEqual(1, sum("jdx/mise-action@" in action for action in uses))
 
-    def test_ci_exposes_named_parallel_checks_and_builds_the_app(self) -> None:
+    def test_ci_exposes_atomic_mise_steps_and_builds_the_app(self) -> None:
         workflow = load_workflow()
         job = next(iter(workflow["jobs"].values()))
         steps = job["steps"]
 
-        self.assertNotIn("Verify source", [step.get("name") for step in steps])
-        self.assertFalse(
-            any("mise run ci:hosted" in step.get("run", "") for step in steps)
-        )
-
-        parallel_groups = [step["parallel"] for step in steps if "parallel" in step]
-        self.assertEqual(1, len(parallel_groups))
-        parallel_steps = parallel_groups[0]
-        parallel_index = next(
-            index for index, step in enumerate(steps) if "parallel" in step
-        )
-        names = [step["name"] for step in parallel_steps]
-        self.assertEqual(len(names), len(set(names)))
-
-        serial_commands = {
-            step.get("run") for step in steps[:parallel_index] if isinstance(step, dict)
+        named_commands = {
+            step["name"]: step["run"]
+            for step in steps
+            if "name" in step and "run" in step
         }
-        self.assertTrue(
+        self.assertEqual(
             {
-                "mise run test:support",
-                "mise run test:media",
-            }.issubset(serial_commands)
+                "Bootstrap protocol dependency": "mise run protocol:bootstrap",
+                "Build protocol XCFramework": "mise run protocol:xcframework",
+                "Generate Xcode project": "mise run generate",
+                "Test build tooling": "mise run test:support",
+                "Test native media boundary": "mise run test:media",
+                "Check Swift formatting": "mise run format:check",
+                "Lint Swift": "mise run lint:swift",
+                "Lint shell scripts": "mise run lint:shell",
+                "Detect duplicate code": "mise run lint:duplication",
+                "Detect dead code": "mise run lint:dead-code",
+                "Test Rust protocol": "mise run test:rust",
+                "Test Swift packages": "mise run test:swift",
+                "Verify protocol bridge": "mise run protocol:verify",
+                "Build iOS app": "mise run build:app",
+            },
+            named_commands,
         )
-
-        commands = {step["run"] for step in parallel_steps}
-        self.assertTrue(
-            {
-                "mise run lint:shell",
-                "mise run test:rust",
-                "mise run test:swift",
-                "mise run protocol:verify",
-                "mise run build:app",
-            }.issubset(commands)
-        )
+        self.assertTrue(all(command.startswith("mise run ") for command in named_commands.values()))
 
         app_build = next(
-            step for step in parallel_steps if step["run"] == "mise run build:app"
+            step for step in steps if step.get("run") == "mise run build:app"
         )
         self.assertEqual("Release", app_build["env"]["CONFIGURATION"])
         self.assertEqual("NO", app_build["env"]["CODE_SIGNING_ALLOWED"])
         self.assertIn("DERIVED_DATA_PATH", app_build["env"])
 
         swift_tests = next(
-            step for step in parallel_steps if step["run"] == "mise run test:swift"
+            step for step in steps if step.get("run") == "mise run test:swift"
         )
         self.assertIn("SWIFT_SCRATCH_PATH", swift_tests["env"])
+
+    def test_safe_checks_run_as_visible_background_steps(self) -> None:
+        workflow = load_workflow()
+        job = next(iter(workflow["jobs"].values()))
+        steps = job["steps"]
+        background_commands = {
+            step["run"] for step in steps if step.get("background") is True
+        }
+        self.assertEqual(
+            {
+                "mise run format:check",
+                "mise run lint:swift",
+                "mise run lint:shell",
+                "mise run lint:duplication",
+                "mise run lint:dead-code",
+                "mise run test:rust",
+                "mise run test:swift",
+                "mise run protocol:verify",
+                "mise run build:app",
+            },
+            background_commands,
+        )
+        self.assertTrue(any("wait-all" in step for step in steps))
+        self.assertFalse(any("parallel" in step for step in steps))
 
     def test_parallel_heavy_steps_use_independent_process_guards(self) -> None:
         workflow = load_workflow()
         job = next(iter(workflow["jobs"].values()))
-        parallel_group = next(
-            step["parallel"] for step in job["steps"] if "parallel" in step
-        )
-        guarded_commands = {
-            "mise run test:rust",
-            "mise run test:swift",
-            "mise run protocol:verify",
-            "mise run build:app",
-        }
+        guarded_steps = [
+            step
+            for step in job["steps"]
+            if step.get("background") is True
+            and step.get("run")
+            in {
+                "mise run test:rust",
+                "mise run test:swift",
+                "mise run protocol:verify",
+                "mise run build:app",
+                "mise run lint:dead-code",
+            }
+        ]
         lock_paths = [
             step["env"]["DEVICE_HUB_GUARD_LOCK_PATH"]
-            for step in parallel_group
-            if step["run"] in guarded_commands
+            for step in guarded_steps
         ]
 
-        self.assertEqual(len(guarded_commands), len(lock_paths))
+        self.assertEqual(5, len(lock_paths))
         self.assertEqual(len(lock_paths), len(set(lock_paths)))
 
 

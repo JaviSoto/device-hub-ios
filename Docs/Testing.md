@@ -21,11 +21,13 @@ fast repository checks; product changes run the complete Swift and Rust test,
 source-check, generated-project, app-build, and visual validation suite. Set
 `DEVICE_HUB_FULL_CI=1` to force every gate locally.
 
-GitHub Actions uses one Xcode 27 runner and one checkout. Shared project and
-protocol generation run first; independent lint, test, verification, and
-unsigned Release-build steps then run concurrently with separate logs. Pull
-requests targeting `main` use the same workflow. Workflows from external forks
-require maintainer approval before they run.
+GitHub Actions uses one Xcode 27 runner and one checkout. Every repository
+command is a named `mise` task. SwiftFormat, SwiftLint, ShellCheck, jscpd,
+Periphery, Rust tests, Swift package tests, protocol verification, and the
+unsigned Release build run as individually visible background steps with
+separate logs. Simulator-bound media verification remains serialized. Pull
+requests targeting `main` use the same workflow, while workflows from external
+forks require maintainer approval before they run.
 
 ## Simulator ownership
 

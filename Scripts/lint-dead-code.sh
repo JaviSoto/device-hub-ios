@@ -5,24 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 # shellcheck source=BuildSupport/process_guard.sh
 source "$PROCESS_GUARD"
-devicehub_require_guard lint 1800 "$0" "$@"
+devicehub_require_guard lint-dead-code 1800 "$0" "$@"
 
-require_command() {
-  local command_name="${1:?command name required}"
-  if ! command -v "$command_name" >/dev/null 2>&1; then
-    echo "Missing required validation tool: $command_name" >&2
-    return 1
-  fi
-}
-
-for command_name in swiftformat swiftlint jscpd xcodegen periphery; do
-  require_command "$command_name"
-done
-
-cd "$ROOT"
-"$ROOT/Scripts/lint-source.sh"
-
-xcodegen generate
 DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
 if [[ ! -d "$DEVELOPER_DIR" ]]; then
   echo "Xcode developer directory does not exist: $DEVELOPER_DIR" >&2
@@ -35,6 +19,12 @@ if [[ -n "${DYLD_LIBRARY_PATH:-}" ]]; then
   export DYLD_LIBRARY_PATH="$INDEXSTORE_LIBRARY_DIR:$DYLD_LIBRARY_PATH"
 else
   export DYLD_LIBRARY_PATH="$INDEXSTORE_LIBRARY_DIR"
+fi
+
+cd "$ROOT"
+if [[ ! -d DeviceHub.xcodeproj ]]; then
+  echo "DeviceHub.xcodeproj is missing; run 'mise run generate' first." >&2
+  exit 1
 fi
 
 periphery scan \
