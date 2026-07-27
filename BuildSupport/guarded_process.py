@@ -781,7 +781,9 @@ def parent_death_watchdog(
             supervision_error = supervision_error or error
         if watchdog is not None:
             try:
-                watchdog_status = watchdog.wait(timeout=max(grace_seconds, 0.1))
+                watchdog_status = watchdog.wait(
+                    timeout=max(grace_seconds * 3, 5.0)
+                )
                 if watchdog_status != 0:
                     supervision_error = supervision_error or OSError(
                         f"process watchdog exited with status {watchdog_status}"

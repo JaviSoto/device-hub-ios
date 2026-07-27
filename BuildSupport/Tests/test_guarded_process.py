@@ -457,6 +457,7 @@ class GuardedProcessTests(unittest.TestCase):
 
             watchdog.kill.assert_called_once_with()
             self.assertEqual(watchdog.wait.call_count, 2)
+            self.assertEqual(watchdog.wait.call_args_list[0].kwargs["timeout"], 5.0)
         finally:
             for descriptor in (read_descriptor, write_descriptor):
                 try:

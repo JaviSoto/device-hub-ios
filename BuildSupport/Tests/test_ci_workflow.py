@@ -55,17 +55,28 @@ class CIWorkflowContractTests(unittest.TestCase):
         parallel_groups = [step["parallel"] for step in steps if "parallel" in step]
         self.assertEqual(1, len(parallel_groups))
         parallel_steps = parallel_groups[0]
+        parallel_index = next(
+            index for index, step in enumerate(steps) if "parallel" in step
+        )
         names = [step["name"] for step in parallel_steps]
         self.assertEqual(len(names), len(set(names)))
+
+        serial_commands = {
+            step.get("run") for step in steps[:parallel_index] if isinstance(step, dict)
+        }
+        self.assertTrue(
+            {
+                "mise run test:support",
+                "mise run test:media",
+            }.issubset(serial_commands)
+        )
 
         commands = {step["run"] for step in parallel_steps}
         self.assertTrue(
             {
-                "mise run test:support",
                 "mise run lint:shell",
                 "mise run test:rust",
                 "mise run test:swift",
-                "mise run test:media",
                 "mise run protocol:verify",
                 "mise run build:app",
             }.issubset(commands)
@@ -92,7 +103,6 @@ class CIWorkflowContractTests(unittest.TestCase):
         guarded_commands = {
             "mise run test:rust",
             "mise run test:swift",
-            "mise run test:media",
             "mise run protocol:verify",
             "mise run build:app",
         }

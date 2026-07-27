@@ -57,16 +57,32 @@ def validate_identifier(value: object) -> str:
 def subprocess_command(arguments: tuple[str, ...], check: bool = True) -> str:
     """Run one bounded command and return its standard output."""
 
+    operation = (
+        f"simctl {arguments[2]}"
+        if len(arguments) > 2 and arguments[1] == "simctl"
+        else " ".join(arguments[:2])
+    )
+    timeout_seconds = (
+        180 if len(arguments) > 2 and arguments[1:3] == ("simctl", "bootstatus") else 60
+    )
     try:
         result = subprocess.run(
             arguments,
             check=check,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=timeout_seconds,
         )
-    except (OSError, subprocess.SubprocessError) as error:
-        raise CommandError(f"command failed: {arguments[0]} {arguments[1]}") from error
+    except subprocess.TimeoutExpired as error:
+        raise CommandError(
+            f"{operation} timed out after {timeout_seconds} seconds"
+        ) from error
+    except subprocess.CalledProcessError as error:
+        detail = " ".join((error.stderr or "").strip().split())[:500]
+        suffix = f": {detail}" if detail else ""
+        raise CommandError(f"{operation} failed{suffix}") from error
+    except OSError as error:
+        raise CommandError(f"{operation} could not start: {error}") from error
     return result.stdout.strip()
 
 

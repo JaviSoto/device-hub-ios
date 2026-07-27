@@ -34,10 +34,15 @@ jobs:
       - name: Build protocol bridge
         run: mise run protocol:build
 
-      - parallel:
-          - name: Test build tooling
-            run: mise run test:support
+      - name: Test build tooling
+        run: mise run test:support
 
+      - name: Test native media boundary
+        env:
+          DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-media.lock
+        run: mise run test:media
+
+      - parallel:
           - name: Lint shell scripts
             run: mise run lint:shell
 
@@ -51,11 +56,6 @@ jobs:
               DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-swift.lock
               SWIFT_SCRATCH_PATH: ${{ runner.temp }}/DeviceHubSwiftTests
             run: mise run test:swift
-
-          - name: Test native media boundary
-            env:
-              DEVICE_HUB_GUARD_LOCK_PATH: ${{ runner.temp }}/device-hub-test-media.lock
-            run: mise run test:media
 
           - name: Verify protocol bridge
             env:
