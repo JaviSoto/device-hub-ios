@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/kucherenko/jscpd/master/packages/jscpd/schema/jscpd-schema.json",
+  "absolute": true,
+  "exitCode": 1,
+  "format": [
+    "swift"
+  ],
+  "ignore": [
+    "**/.build/**",
+    "**/DerivedData/**",
+    "**/DeviceHub.xcodeproj/**",
+    "**/Vendor/**"
+  ],
+  "minLines": 12,
+  "minTokens": 80,
+  "reporters": [
+    "console"
+  ],
+  "threshold": 0
+}

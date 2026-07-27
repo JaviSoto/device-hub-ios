@@ -1,0 +1,51 @@
+included:
+  - Packages/DeviceHubKit/Sources
+  - Packages/DeviceHubKit/Tests
+  - Sources
+  - Tools/DeviceHubPreviewRenderer/Sources
+  - Tools/DeviceHubPreviewRenderer/Tests
+
+excluded:
+  - .build
+  - Packages/DeviceHubKit/.build
+  - Tools/DeviceHubPreviewRenderer/.build
+  - DerivedData
+  - PreviewArtifacts
+  - Vendor
+  - DeviceHub.xcodeproj
+
+opt_in_rules:
+  - empty_count
+  - fatal_error_message
+  - first_where
+  - sorted_imports
+
+disabled_rules:
+  - identifier_name
+  - opening_brace
+  - trailing_comma
+  - todo
+
+line_length:
+  warning: 160
+  error: 220
+
+file_length:
+  warning: 650
+  error: 900
+
+function_body_length:
+  warning: 110
+  error: 160
+
+type_body_length:
+  warning: 420
+  error: 560
+
+cyclomatic_complexity:
+  warning: 22
+  error: 30
+
+function_parameter_count:
+  warning: 6
+  error: 8

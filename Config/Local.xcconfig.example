@@ -1,0 +1,11 @@
+// Copy this file to Local.xcconfig and provide values for your own account.
+
+DEVICE_HUB_BUNDLE_IDENTIFIER = com.example.DeviceHub
+DEVICE_HUB_DEVELOPMENT_TEAM =
+DEVICE_HUB_CODE_SIGN_STYLE = Automatic
+DEVICE_HUB_PROVISIONING_PROFILE_SPECIFIER =
+DEVICE_HUB_PAIRING_KEYCHAIN_SERVICE = DeviceHub.PairingVault
+
+// Optional remote diagnostics remain disabled until the user opts in in-app.
+// DEVICE_HUB_DIAGNOSTICS_ENDPOINT = https://diagnostics.example/v1/diagnostics/batches
+// DEVICE_HUB_DIAGNOSTICS_TOKEN =

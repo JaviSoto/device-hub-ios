@@ -1,0 +1,4 @@
+module DeviceHubFFI {
+  header "device_hub_ffi.h"
+  export *
+}

@@ -1,0 +1,4 @@
+*.png binary
+Vendor/patches/*.patch -whitespace
+*.xcframework/** linguist-vendored
+Vendor/** linguist-vendored

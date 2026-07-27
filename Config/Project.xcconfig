@@ -1,0 +1,13 @@
+// Portable defaults for source builds. Put personal signing and optional
+// diagnostics settings in Local.xcconfig, which is intentionally ignored.
+
+DEVICE_HUB_BUNDLE_IDENTIFIER = com.example.DeviceHub
+DEVICE_HUB_CODE_SIGN_STYLE = Automatic
+DEVICE_HUB_DEVELOPMENT_TEAM =
+DEVICE_HUB_PROVISIONING_PROFILE_SPECIFIER =
+DEVICE_HUB_DIAGNOSTICS_ENDPOINT =
+DEVICE_HUB_DIAGNOSTICS_TOKEN =
+DEVICE_HUB_PAIRING_KEYCHAIN_SERVICE = DeviceHub.PairingVault
+
+// Local overrides must come last because xcconfig is evaluated top to bottom.
+#include? "Local.xcconfig"

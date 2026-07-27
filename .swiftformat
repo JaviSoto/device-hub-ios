@@ -1,0 +1,8 @@
+--swiftversion 6.0
+--indent 4
+--maxwidth 160
+--wraparguments before-first
+--wrapcollections before-first
+--commas inline
+--stripunusedargs closure-only
+--exclude .build,DerivedData,PreviewArtifacts,DeviceHub.xcodeproj,Vendor

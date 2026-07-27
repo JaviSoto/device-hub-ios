@@ -1,0 +1,15 @@
+[workspace]
+members = ["DeviceHubFFI"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = "s"
+panic = "unwind"
+strip = "debuginfo"

@@ -1,0 +1,165 @@
+name: DeviceHub
+options:
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "27.0"
+settings:
+  base:
+    ALWAYS_SEARCH_USER_PATHS: "NO"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: "YES"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_STRICT_OBJC_MSGSEND: "YES"
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+    IPHONEOS_DEPLOYMENT_TARGET: "27.0"
+    MARKETING_VERSION: "1.0.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_VERSION: "6.0"
+packages:
+  DeviceHubKit:
+    path: Packages/DeviceHubKit
+targets:
+  DeviceHubPrivateMedia:
+    type: framework
+    platform: iOS
+    sources:
+      - path: Sources/DeviceHubPrivateMedia/DHAVConferenceReceiver.mm
+      - path: Sources/DeviceHubPrivateMedia/include
+        headerVisibility: public
+    dependencies:
+      - sdk: Foundation.framework
+      - sdk: QuartzCore.framework
+    settings:
+      base:
+        CLANG_CXX_LANGUAGE_STANDARD: "c++20"
+        CLANG_ENABLE_MODULES: "YES"
+        CLANG_ENABLE_OBJC_ARC: "YES"
+        DEFINES_MODULE: "YES"
+        GENERATE_INFOPLIST_FILE: "YES"
+        MACH_O_TYPE: staticlib
+        PRODUCT_MODULE_NAME: DeviceHubPrivateMedia
+        SKIP_INSTALL: "YES"
+  DeviceHubLive:
+    type: library.static
+    platform: iOS
+    sources:
+      - path: Sources/DeviceHubLive
+    dependencies:
+      - framework: Rust/Artifacts/DeviceHubFFI.xcframework
+        embed: false
+        link: false
+      - target: DeviceHubPrivateMedia
+        link: false
+      - package: DeviceHubKit
+        product: DeviceHubCore
+        link: false
+      - package: DeviceHubKit
+        product: DeviceHubClient
+        link: false
+      - package: DeviceHubKit
+        product: DeviceHubDiagnostics
+        link: false
+      - package: DeviceHubKit
+        product: DeviceHubPersistence
+        link: false
+      - package: DeviceHubKit
+        product: DeviceHubTransport
+        link: false
+    settings:
+      base:
+        DEFINES_MODULE: "YES"
+        PRODUCT_MODULE_NAME: DeviceHubLive
+        SKIP_INSTALL: "YES"
+        SWIFT_INSTALL_OBJC_HEADER: "NO"
+  DeviceHub:
+    type: application
+    platform: iOS
+    configFiles:
+      Debug: Config/Project.xcconfig
+      Release: Config/Project.xcconfig
+    sources:
+      - path: Sources/DeviceHubApp
+      - path: Assets.xcassets
+        buildPhase: resources
+      - path: Licenses
+        buildPhase: resources
+        type: folder
+      - path: THIRD_PARTY_NOTICES.md
+        buildPhase: resources
+    dependencies:
+      - target: DeviceHubLive
+        embed: false
+      - target: DeviceHubPrivateMedia
+      - framework: Rust/Artifacts/DeviceHubFFI.xcframework
+        embed: false
+        link: true
+      - package: DeviceHubKit
+        product: DeviceHubCore
+      - package: DeviceHubKit
+        product: DeviceHubClient
+      - package: DeviceHubKit
+        product: DeviceHubDiagnostics
+      - package: DeviceHubKit
+        product: DeviceHubFeature
+      - package: DeviceHubKit
+        product: DeviceHubPersistence
+      - package: DeviceHubKit
+        product: DeviceHubTransport
+      - package: DeviceHubKit
+        product: DeviceHubUI
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: Config/DeviceHub.entitlements
+        CODE_SIGN_STYLE: "$(DEVICE_HUB_CODE_SIGN_STYLE)"
+        DEVELOPMENT_TEAM: "$(DEVICE_HUB_DEVELOPMENT_TEAM)"
+        INFOPLIST_FILE: Config/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: "$(DEVICE_HUB_BUNDLE_IDENTIFIER)"
+        PRODUCT_NAME: DeviceHub
+        PROVISIONING_PROFILE_SPECIFIER: "$(DEVICE_HUB_PROVISIONING_PROFILE_SPECIFIER)"
+        SUPPORTS_MACCATALYST: "NO"
+        TARGETED_DEVICE_FAMILY: "1,2"
+  DeviceHubLiveTests:
+    type: bundle.unit-test
+    platform: iOS
+    configFiles:
+      Debug: Config/Project.xcconfig
+      Release: Config/Project.xcconfig
+    sources:
+      - path: Tests/DeviceHubLiveTests
+    dependencies:
+      - target: DeviceHubLive
+        embed: false
+      - target: DeviceHubPrivateMedia
+        embed: false
+      - framework: Rust/Artifacts/DeviceHubFFI.xcframework
+        embed: false
+        link: true
+      - package: DeviceHubKit
+        product: DeviceHubCore
+      - package: DeviceHubKit
+        product: DeviceHubClient
+      - package: DeviceHubKit
+        product: DeviceHubDiagnostics
+      - package: DeviceHubKit
+        product: DeviceHubPersistence
+      - package: DeviceHubKit
+        product: DeviceHubTransport
+      - package: DeviceHubKit
+        product: DeviceHubUI
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: "$(DEVICE_HUB_BUNDLE_IDENTIFIER).LiveTests"
+schemes:
+  DeviceHub:
+    build:
+      targets:
+        DeviceHub: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - DeviceHubLiveTests

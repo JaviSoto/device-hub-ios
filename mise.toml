@@ -1,0 +1,119 @@
+min_version = "2026.7.12"
+
+[tools]
+python = "3.14.6"
+rust = { version = "1.95.0", profile = "minimal", components = ["clippy", "rustfmt"], targets = ["aarch64-apple-ios", "aarch64-apple-ios-sim"] }
+periphery = "3.7.4"
+ripgrep = "15.2.0"
+shellcheck = "0.11.0"
+swiftformat = "0.62.1"
+swiftlint = "0.63.2"
+uv = "0.11.7"
+xcodegen = "2.45.4"
+"github:cameroncooke/AXe" = { version = "1.8.0", matching = "AXe-macOS-v1.8.0-universal.tar.gz" }
+"npm:jscpd" = "4.0.9"
+
+[tasks.setup]
+description = "Prepare dependencies and generated build inputs"
+run = [
+  "python3 BuildSupport/bootstrap_idevice.py",
+  { task = "protocol:build" },
+  { task = "generate" },
+]
+
+[tasks.generate]
+description = "Generate the Xcode project"
+run = "xcodegen generate"
+
+[tasks.build]
+description = "Build the app"
+run = [
+  { task = "protocol:build" },
+  "Scripts/build-app.sh",
+]
+
+[tasks.archive]
+description = "Create an app archive using local signing settings"
+run = [
+  { task = "protocol:build" },
+  "Scripts/archive-app.sh",
+]
+
+[tasks.test]
+description = "Run the Swift, Rust, native-media, and build-support tests"
+run = [
+  { task = "protocol:build" },
+  { task = "test:support" },
+  { task = "test:rust" },
+  { task = "test:media" },
+  { task = "test:swift" },
+  { task = "test:app" },
+]
+
+[tasks."test:support"]
+description = "Run build-support tests"
+run = "python3 -m unittest discover -s BuildSupport/Tests -p 'test_*.py'"
+
+[tasks."test:rust"]
+description = "Run protocol and FFI tests"
+run = "Scripts/test-rust.sh"
+
+[tasks."test:swift"]
+description = "Run Swift package tests"
+run = "Scripts/test-core.sh"
+
+[tasks."test:media"]
+description = "Run native media boundary tests"
+run = "Sources/DeviceHubPrivateMedia/Tests/run-tests.sh"
+
+[tasks."test:app"]
+description = "Run app integration tests in an iOS Simulator"
+run = "Scripts/test-app.sh"
+
+[tasks.lint]
+description = "Run formatting, lint, duplication, and dead-code checks"
+run = "Scripts/lint.sh"
+
+[tasks."lint:source"]
+description = "Run source-only formatting, lint, and duplication checks"
+run = "Scripts/lint-source.sh"
+
+[tasks."lint:shell"]
+description = "Validate repository shell entry points"
+run = "Scripts/lint-shell.sh"
+
+[tasks.previews]
+description = "Render the deterministic visual review matrix"
+run = "Scripts/render-local-previews.sh"
+
+[tasks."snapshots:record"]
+description = "Regenerate and verify the iOS visual snapshots"
+run = "DEVICE_HUB_RECORD_SNAPSHOTS=1 Scripts/test-app.sh"
+
+[tasks."protocol:build"]
+description = "Build the Rust protocol XCFramework"
+run = [
+  "python3 BuildSupport/bootstrap_idevice.py",
+  "Scripts/build-protocol-xcframework.sh",
+]
+sources = [
+  "BuildSupport/bootstrap_idevice.py",
+  "Rust/Cargo.lock",
+  "Rust/Cargo.toml",
+  "Rust/DeviceHubFFI/**/*.rs",
+  "Rust/DeviceHubFFI/include/*",
+  "Vendor/patches/idevice-device-hub.patch",
+]
+outputs = ["Rust/Artifacts/DeviceHubFFI.xcframework/Info.plist"]
+
+[tasks."protocol:verify"]
+description = "Verify the packaged Rust protocol boundary"
+run = "Scripts/verify-protocol-xcframework.sh"
+
+[tasks.ci]
+description = "Run the complete local verification suite"
+run = "ci/run_ci.sh"
+
+[tasks."ci:hosted"]
+description = "Run source-level checks supported by GitHub's hosted macOS image"
+run = "ci/run_hosted_ci.sh"
