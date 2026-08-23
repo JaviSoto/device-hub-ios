@@ -14,6 +14,7 @@ import SwiftUI
 /// modules.
 @main
 struct DeviceHubApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     private let content: AnyView
 
     @MainActor
@@ -56,6 +57,11 @@ struct DeviceHubApp: App {
     var body: some Scene {
         WindowGroup {
             content
+                .task(id: scenePhase) {
+                    guard scenePhase == .active else { return }
+                    await DeviceHubInstalledAppReporter
+                        .reportCurrentInstallation()
+                }
         }
     }
 }
