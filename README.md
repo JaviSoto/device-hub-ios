@@ -74,6 +74,22 @@ Available tasks:
 
 Run `mise tasks` for the full task list.
 
+## Private builds.lan releases
+
+Create a signed, ad hoc IPA and publish it to the same Builds.lan service used
+by the native Builds app and website:
+
+```sh
+Scripts/release.sh --release-notes-file /absolute/path/release-notes.md
+```
+
+The command builds one artifact, records its source revision, and sends it to
+`POST https://api.builds.lan/v1/builds/ios` through the canonical uploader at
+`/Volumes/RunnerCache/code/builds-native/Scripts/upload-builds-lan-api.py`.
+It does not install the app on a device or use a second catalog or publication
+route. Release notes are required and must contain only the user-visible
+changes since the previous Device Hub build.
+
 ## Project structure
 
 ```text
