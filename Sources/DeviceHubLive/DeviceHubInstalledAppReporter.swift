@@ -38,6 +38,7 @@ public struct DeviceHubInstalledAppReport: Encodable, Equatable, Sendable {
     public let buildNumber: String
     public let reportedAt: Date
     public let sourceRevision: String?
+    public let probeScheme: String?
 
     public init(
         deviceID: String,
@@ -45,7 +46,8 @@ public struct DeviceHubInstalledAppReport: Encodable, Equatable, Sendable {
         version: String,
         buildNumber: String,
         reportedAt: Date,
-        sourceRevision: String? = nil
+        sourceRevision: String? = nil,
+        probeScheme: String? = nil
     ) {
         self.deviceID = deviceID
         self.bundleIdentifier = bundleIdentifier
@@ -53,6 +55,7 @@ public struct DeviceHubInstalledAppReport: Encodable, Equatable, Sendable {
         self.buildNumber = buildNumber
         self.reportedAt = reportedAt
         self.sourceRevision = sourceRevision
+        self.probeScheme = probeScheme
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -62,6 +65,7 @@ public struct DeviceHubInstalledAppReport: Encodable, Equatable, Sendable {
         case buildNumber = "build_number"
         case reportedAt = "reported_at"
         case sourceRevision = "source_revision"
+        case probeScheme = "probe_scheme"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -72,6 +76,7 @@ public struct DeviceHubInstalledAppReport: Encodable, Equatable, Sendable {
         try container.encode(buildNumber, forKey: .buildNumber)
         try container.encode(reportedAt.ISO8601Format(), forKey: .reportedAt)
         try container.encodeIfPresent(sourceRevision, forKey: .sourceRevision)
+        try container.encodeIfPresent(probeScheme, forKey: .probeScheme)
     }
 }
 
@@ -113,7 +118,8 @@ public enum DeviceHubInstalledAppReporter {
             version: version,
             buildNumber: buildNumber,
             reportedAt: now,
-            sourceRevision: sourceRevision(from: bundle)
+            sourceRevision: sourceRevision(from: bundle),
+            probeScheme: "devicehub"
         )
     }
 
@@ -125,7 +131,10 @@ public enum DeviceHubInstalledAppReporter {
         session: URLSession = .shared,
         now: Date = Date()
     ) async {
-        guard let report = currentReport(bundle: bundle, now: now) else {
+        guard
+            let report = currentReport(bundle: bundle, now: now),
+            isValid(report)
+        else {
             return
         }
 
@@ -168,5 +177,35 @@ public enum DeviceHubInstalledAppReporter {
             return nil
         }
         return value
+    }
+
+    /// Validates the report fields that the Builds.lan API accepts.
+    ///
+    /// URL schemes are deliberately restricted to the RFC-compatible custom
+    /// scheme grammar used by the service. This prevents a malformed or
+    /// unexpectedly broad scheme from becoming an install-presence probe.
+    static func isValid(_ report: DeviceHubInstalledAppReport) -> Bool {
+        let requiredValues = [
+            report.deviceID,
+            report.bundleIdentifier,
+            report.version,
+            report.buildNumber
+        ]
+        let sourceRevisionValid = report.sourceRevision.map {
+            $0.range(of: #"^[0-9a-f]{40}$"#, options: .regularExpression) != nil
+        } ?? true
+        let probeSchemeValid = report.probeScheme.map {
+            $0.range(of: #"^[A-Za-z][A-Za-z0-9+.-]{0,63}$"#, options: .regularExpression) != nil
+        } ?? true
+
+        return requiredValues.allSatisfy {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+            && report.deviceID.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil
+            && report.bundleIdentifier.count <= 256
+            && report.version.count <= 128
+            && report.buildNumber.count <= 128
+            && sourceRevisionValid
+            && probeSchemeValid
     }
 }
