@@ -21,13 +21,11 @@ fast repository checks; product changes run the complete Swift and Rust test,
 source-check, generated-project, app-build, and visual validation suite. Set
 `DEVICE_HUB_FULL_CI=1` to force every gate locally.
 
-GitHub Actions uses one Xcode 27 runner and one checkout. Every repository
-command is a named `mise` task. SwiftFormat, SwiftLint, ShellCheck, jscpd,
-Periphery, Rust tests, Swift package tests, protocol verification, and the
-unsigned Release build run as individually visible background steps with
-separate logs. Simulator-bound media verification remains serialized. Pull
-requests targeting `main` use the same workflow, while workflows from external
-forks require maintainer approval before they run.
+Publication uses `git signoff-push`, which runs `mise run ci` against the exact
+clean commit before pushing. There is no GitHub Actions workflow. The complete
+gate runs SwiftFormat, SwiftLint, ShellCheck, jscpd, Periphery, Rust tests,
+Swift package tests, protocol verification, previews, and the unsigned Release
+build. Heavy builds and simulator-bound verification run serially.
 
 ## Simulator ownership
 
@@ -39,6 +37,12 @@ and immediately verifies it before boot. Each device name contains ` - Codex `
 so an interrupted run can be distinguished from other simulators. GitHub-hosted
 runners without SimSlim and its profile use the same exact-device lifecycle
 without the host-specific profile.
+
+Visual references are recorded and compared on the helper's default iPhone
+model (currently iPhone 17 Pro). The matrix supplies iPhone and iPad view sizes
+and traits. Use an iPad simulator for interactive window-resize checks, not to
+record the shared references: UIKit text rasterization still depends on the
+underlying simulator's display scale.
 
 Native XCTest and snapshot runs keep one raw log and `.xcresult` per pass under
 `DERIVED_DATA_PATH/TestEvidence/DeviceHub` by default. Set

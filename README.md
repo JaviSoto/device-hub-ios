@@ -2,7 +2,6 @@
 
 ![Device Hub iOS running on iPad and controlling an iPhone](Docs/Images/device-hub-ipad.png)
 
-[![CI](https://github.com/JaviSoto/device-hub-ios/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JaviSoto/device-hub-ios/actions/workflows/ci.yml)
 ![iOS and iPadOS 27+](https://img.shields.io/badge/iOS%20%26%20iPadOS-27%2B-000000?logo=apple&logoColor=white)
 ![Swift 6.4](https://img.shields.io/badge/Swift-6.4-F05138?logo=swift&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
