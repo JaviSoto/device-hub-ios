@@ -9,14 +9,16 @@ devicehub_require_guard test-app 1800 "$0" "$@"
 
 # shellcheck source=BuildSupport/simulator_guard.sh
 source "$ROOT/BuildSupport/simulator_guard.sh"
-devicehub_require_simulator device-hub-test-app 1800 "$0" "$@"
+# shellcheck source=BuildSupport/xcodebuild_test_output.sh
+source "$ROOT/BuildSupport/xcodebuild_test_output.sh"
 
 RUN_ROOT="$(mktemp -d "${TMPDIR:-/private/tmp}/device-hub-app-tests.XXXXXX")"
-DERIVED_DATA_PATH="$RUN_ROOT/DerivedData"
-SNAPSHOT_DERIVED_DATA_PATH="$RUN_ROOT/SnapshotDerivedData"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+EVIDENCE_ROOT="${DEVICE_HUB_TEST_EVIDENCE_DIR:-$DERIVED_DATA_PATH/TestEvidence/DeviceHub/$RUN_ID}"
 ACCESSIBILITY_JSON="$RUN_ROOT/accessibility.json"
-SIMULATOR_UDID="${DEVICE_HUB_SIMULATOR_UDID:?simulator lease did not provide a UDID}"
 RECORD_SNAPSHOTS="${DEVICE_HUB_RECORD_SNAPSHOTS:-0}"
+XCBEAUTIFY_COMMAND="${XCBEAUTIFY_COMMAND:-xcbeautify}"
 
 # Invoked by the EXIT trap below.
 # shellcheck disable=SC2329
@@ -33,15 +35,61 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$ROOT"
+
+# Fail on source or compiler errors before this task creates or boots a device.
+DESTINATION="generic/platform=iOS Simulator" \
+CODE_SIGNING_ALLOWED=YES \
+DERIVED_DATA_PATH="$DERIVED_DATA_PATH" \
+  Scripts/build-app.sh
+
+if ! command -v "$XCBEAUTIFY_COMMAND" >/dev/null 2>&1; then
+  printf 'Required test formatter is unavailable: %s\n' "$XCBEAUTIFY_COMMAND" >&2
+  exit 127
+fi
+
+REPOSITORY_ROOT="$(cd "$ROOT" && pwd -P)"
+if [[ "$EVIDENCE_ROOT" != /* ]]; then
+  printf 'Test evidence path must be absolute: %s\n' "$EVIDENCE_ROOT" >&2
+  exit 2
+fi
+case "$EVIDENCE_ROOT/" in
+  "$REPOSITORY_ROOT/"*)
+    printf 'Test evidence must be outside the repository: %s\n' "$EVIDENCE_ROOT" >&2
+    exit 2
+    ;;
+esac
+mkdir -p "$EVIDENCE_ROOT"
+EVIDENCE_ROOT="$(cd "$EVIDENCE_ROOT" && pwd -P)"
+case "$EVIDENCE_ROOT/" in
+  "$REPOSITORY_ROOT/"*)
+    printf 'Test evidence must resolve outside the repository: %s\n' "$EVIDENCE_ROOT" >&2
+    exit 2
+    ;;
+esac
+printf 'Test evidence: %s\n' "$EVIDENCE_ROOT"
+
+devicehub_require_simulator device-hub-test-app
+SIMULATOR_UDID="${DEVICE_HUB_SIMULATOR_UDID:?simulator setup did not provide a UDID}"
+
 Sources/DeviceHubPrivateMedia/Tests/run-tests.sh
 
 DESTINATION="platform=iOS Simulator,id=$SIMULATOR_UDID" \
 DERIVED_DATA_PATH="$DERIVED_DATA_PATH" \
+DEVICE_HUB_TEST_EVIDENCE_DIR="$EVIDENCE_ROOT" \
+XCBEAUTIFY_COMMAND="$XCBEAUTIFY_COMMAND" \
   Scripts/test-live-ios.sh
 
 run_ui_snapshot_tests() {
   local record_mode="${1:?record mode required}"
+  local pass_name="verify"
   local compilation_conditions
+  local raw_log
+  local result_bundle
+  if [[ "$record_mode" == "1" ]]; then
+    pass_name="record"
+  fi
+  raw_log="$EVIDENCE_ROOT/devicehub-ui-snapshot-$pass_name-$RUN_ID.log"
+  result_bundle="$EVIDENCE_ROOT/devicehub-ui-snapshot-$pass_name-$RUN_ID.xcresult"
   # Xcode expands this build-setting token; the shell must preserve it.
   # shellcheck disable=SC2016
   compilation_conditions='$(inherited)'
@@ -50,20 +98,26 @@ run_ui_snapshot_tests() {
   fi
   (
     cd "$ROOT/Packages/DeviceHubKit"
-    set +e
-    /usr/bin/xcodebuild test \
-        -quiet \
+    if devicehub_run_xcodebuild_test \
+        "devicehub-ui-snapshot-$pass_name" \
+        "$raw_log" \
+        "$result_bundle" \
+        "$XCBEAUTIFY_COMMAND" \
+        /usr/bin/xcodebuild \
+        test \
         -scheme DeviceHubKit-Package \
         -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-        -derivedDataPath "$SNAPSHOT_DERIVED_DATA_PATH" \
+        -derivedDataPath "$DERIVED_DATA_PATH" \
         -only-testing:DeviceHubUITests/DeviceHubVisualSnapshotTests \
         -parallel-testing-enabled NO \
         -collect-test-diagnostics never \
         -skipMacroValidation \
         "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$compilation_conditions" \
-        CODE_SIGNING_ALLOWED=NO
-    local test_status=$?
-    set -e
+        CODE_SIGNING_ALLOWED=NO; then
+      local test_status=0
+    else
+      local test_status=$?
+    fi
     if ! python3 "$ROOT/BuildSupport/guarded_process.py" \
       --cleanup-selected-xcode-test-service-hub \
       --developer-dir "$(xcode-select -p)"; then

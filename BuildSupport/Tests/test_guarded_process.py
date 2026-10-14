@@ -45,6 +45,218 @@ def different_group_descendant_program(identity_path: Path) -> str:
 
 
 class GuardedProcessTests(unittest.TestCase):
+    def test_session_inspection_fetches_commands_only_for_session_members(self) -> None:
+        inspection_results = (
+            subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="101 1\n202 1\n303 202\n",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="101 1 /usr/bin/one\n303 202 /usr/bin/three\n",
+                stderr="",
+            ),
+        )
+        with (
+            mock.patch.object(
+                guarded_process,
+                "process_status_executable",
+                return_value=Path("/bin/ps"),
+            ),
+            mock.patch.object(
+                guarded_process.subprocess,
+                "run",
+                side_effect=inspection_results,
+            ) as run_process_inspection,
+            mock.patch.object(
+                guarded_process.os,
+                "getsid",
+                side_effect=lambda process_id: {
+                    101: 101,
+                    202: 202,
+                    303: 101,
+                }[process_id],
+            ) as get_session_id,
+        ):
+            members = guarded_process.process_session_members(101)
+
+        self.assertEqual(
+            members,
+            (
+                guarded_process.ProcessSessionMember(
+                    process_id=101,
+                    parent_process_id=1,
+                    executable_path=Path("/usr/bin/one"),
+                ),
+                guarded_process.ProcessSessionMember(
+                    process_id=303,
+                    parent_process_id=202,
+                    executable_path=Path("/usr/bin/three"),
+                ),
+            ),
+        )
+        self.assertEqual(
+            get_session_id.call_args_list,
+            [
+                mock.call(101),
+                mock.call(202),
+                mock.call(303),
+                mock.call(101),
+                mock.call(303),
+            ],
+        )
+        calls = run_process_inspection.call_args_list
+        self.assertEqual(calls[0].args[0], ["/bin/ps", "-axo", "pid=,ppid="])
+        self.assertEqual(
+            calls[1].args[0],
+            ["/bin/ps", "-p", "101,303", "-o", "pid=,ppid=,comm="],
+        )
+
+    def test_session_inspection_tolerates_members_exiting_before_detail_query(
+        self,
+    ) -> None:
+        with (
+            mock.patch.object(
+                guarded_process,
+                "process_status_executable",
+                return_value=Path("/bin/ps"),
+            ),
+            mock.patch.object(
+                guarded_process.subprocess,
+                "run",
+                side_effect=(
+                    subprocess.CompletedProcess([], 0, "101 1\n", ""),
+                    subprocess.CompletedProcess([], 1, "", ""),
+                ),
+            ) as run_process_inspection,
+            mock.patch.object(
+                guarded_process.os,
+                "getsid",
+                side_effect=(101, ProcessLookupError()),
+            ) as get_session_id,
+        ):
+            members = guarded_process.process_session_members(101)
+
+        self.assertEqual(members, ())
+        self.assertEqual(
+            get_session_id.call_args_list,
+            [mock.call(101), mock.call(101)],
+        )
+        self.assertEqual(
+            run_process_inspection.call_args_list[1].args[0],
+            ["/bin/ps", "-p", "101", "-o", "pid=,ppid=,comm="],
+        )
+
+    def test_session_inspection_revalidates_ownership_after_detail_query(self) -> None:
+        with (
+            mock.patch.object(
+                guarded_process,
+                "process_status_executable",
+                return_value=Path("/bin/ps"),
+            ),
+            mock.patch.object(
+                guarded_process.subprocess,
+                "run",
+                side_effect=(
+                    subprocess.CompletedProcess([], 0, "101 1\n", ""),
+                    subprocess.CompletedProcess(
+                        [], 0, "101 1 /usr/bin/reused-pid\n", ""
+                    ),
+                ),
+            ),
+            mock.patch.object(
+                guarded_process.os,
+                "getsid",
+                side_effect=(101, 202),
+            ),
+        ):
+            members = guarded_process.process_session_members(101)
+
+        self.assertEqual(members, ())
+
+    def test_session_inspection_fails_when_process_status_omits_live_member(
+        self,
+    ) -> None:
+        with (
+            mock.patch.object(
+                guarded_process,
+                "process_status_executable",
+                return_value=Path("/bin/ps"),
+            ),
+            mock.patch.object(
+                guarded_process.subprocess,
+                "run",
+                side_effect=(
+                    subprocess.CompletedProcess([], 0, "101 1\n", ""),
+                    subprocess.CompletedProcess([], 1, "", ""),
+                ),
+            ),
+            mock.patch.object(
+                guarded_process.os,
+                "getsid",
+                return_value=101,
+            ),
+        ):
+            with self.assertRaisesRegex(
+                OSError,
+                "process inspection omitted live session members",
+            ):
+                guarded_process.process_session_members(101)
+
+    def test_session_inventory_does_not_treat_no_match_as_an_empty_session(
+        self,
+    ) -> None:
+        with (
+            mock.patch.object(
+                guarded_process,
+                "process_status_executable",
+                return_value=Path("/bin/ps"),
+            ),
+            mock.patch.object(
+                guarded_process.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 1, "", ""),
+            ),
+        ):
+            with self.assertRaisesRegex(OSError, "exited with status 1"):
+                guarded_process.process_session_members(101)
+
+    def test_session_inspection_distinguishes_timeout_from_exit_status(self) -> None:
+        failures = (
+            (
+                subprocess.TimeoutExpired(["/bin/ps"], 2.0),
+                "timed out",
+            ),
+            (
+                subprocess.CompletedProcess(["/bin/ps"], 9, "", ""),
+                "exited with status 9",
+            ),
+        )
+        for failure, message in failures:
+            with self.subTest(message=message):
+                side_effect = (
+                    failure
+                    if isinstance(failure, BaseException)
+                    else lambda *_args, **_kwargs: failure
+                )
+                with (
+                    mock.patch.object(
+                        guarded_process,
+                        "process_status_executable",
+                        return_value=Path("/bin/ps"),
+                    ),
+                    mock.patch.object(
+                        guarded_process.subprocess,
+                        "run",
+                        side_effect=side_effect,
+                    ),
+                ):
+                    with self.assertRaisesRegex(OSError, message):
+                        guarded_process.process_session_members(101)
+
     def assert_different_group_same_session(self, identity_path: Path) -> int:
         """Validate the cross-process-group fixture and return its PID."""
 

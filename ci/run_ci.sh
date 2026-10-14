@@ -7,13 +7,7 @@ PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 source "$PROCESS_GUARD"
 devicehub_require_guard full-ci 3600 "$0" "$@"
 
-RELEASE_DERIVED_DATA_PATH="$(
-  mktemp -d "${TMPDIR:-/private/tmp}/device-hub-release.XXXXXX"
-)"
-cleanup() {
-  rm -rf "$RELEASE_DERIVED_DATA_PATH"
-}
-trap cleanup EXIT
+RELEASE_DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
 
 cd "$ROOT"
 

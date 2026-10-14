@@ -31,26 +31,44 @@ forks require maintainer approval before they run.
 
 ## Simulator ownership
 
-`mise run test:app`, `mise run test:media`, and snapshot recording delegate
-local simulator ownership to the host-wide `codex-simulator-lease` supervisor
-when it is installed. The supervisor serializes simulator work across
-repositories, records the exact UUID before boot, terminates the complete
-workload process group, and does not release ownership until shutdown and
-deletion are verified.
+`mise run test:app`, `mise run test:media`, and snapshot recording each own one
+fresh simulator for that test run. The app-test script first builds for the
+generic iOS Simulator destination, then creates and boots the selected device.
+On home Macs, setup applies `~/.config/simslim/codex.json` to that exact UDID
+and immediately verifies it before boot. Each device name contains ` - Codex `
+so an interrupted run can be distinguished from other simulators. GitHub-hosted
+runners without SimSlim and its profile use the same exact-device lifecycle
+without the host-specific profile.
 
-Exit status `75` means another simulator workflow owns the host. Status `125`
-means cleanup could not be proven. After an aborted, detached, timed-out, or
-signal-terminated run, do not retry the test command. First run:
+Native XCTest and snapshot runs keep one raw log and `.xcresult` per pass under
+`DERIVED_DATA_PATH/TestEvidence/DeviceHub` by default. Set
+`DEVICE_HUB_TEST_EVIDENCE_DIR` to an absolute caller-owned evidence folder
+outside the repository instead.
+The test stream is formatted with `xcbeautify --is-ci`, which keeps the Swift
+Testing summary visible; the original `xcodebuild` exit code is preserved.
+`test-app` reuses one `DERIVED_DATA_PATH` for preflight, live tests, snapshots,
+and the final app build. Dead-code analysis keeps its package index under that
+root's `Periphery/DeviceHubKit` child.
+
+The setup helper is also available for a one-off UI run. It prints the exact
+UDID and task-owned name as tab-separated fields; pass both back unchanged for
+validation and cleanup. A specific model can be selected by its exact Xcode
+device-type name:
 
 ```sh
-codex-simulator-lease reap
-codex-simulator-lease status --json
+IFS=$'\t' read -r UDID CREATED SIM_NAME < <(
+  python3 BuildSupport/simulator_setup.py prepare --name device-hub-ui \
+    --device-type 'iPad Pro 13-inch (M4)'
+)
+python3 BuildSupport/simulator_setup.py validate-task --udid "$UDID" --name "$SIM_NAME"
+python3 BuildSupport/simulator_setup.py cleanup --udid "$UDID" --name "$SIM_NAME"
 ```
 
-The reaper targets only the registered UUID and retains durable state when
-cleanup cannot be verified. Isolated environments without the shared
-supervisor, including GitHub-hosted runners, use one stable managed simulator
-name and verified exact-device teardown.
+Cleanup restores and verifies stock simulator services through SimSlim before
+shutting down and deleting only that exact task-owned UDID. If a run is
+interrupted or cleanup cannot be proven, inspect that device's exact identity
+and state, then use the helper's `cleanup` command with its original UDID and
+name before retrying. Do not add a host-wide lease, lock, or watcher.
 
 ## Regression strategy
 

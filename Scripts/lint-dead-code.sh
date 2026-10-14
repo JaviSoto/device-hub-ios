@@ -8,6 +8,7 @@ source "$PROCESS_GUARD"
 devicehub_require_guard lint-dead-code 1800 "$0" "$@"
 
 DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
 if [[ ! -d "$DEVELOPER_DIR" ]]; then
   echo "Xcode developer directory does not exist: $DEVELOPER_DIR" >&2
   exit 1
@@ -39,13 +40,18 @@ periphery scan \
   --format xcode \
   -- \
   -destination generic/platform=iOS \
+  -derivedDataPath "$DERIVED_DATA_PATH" \
   -skipMacroValidation \
   CODE_SIGNING_ALLOWED=NO
 
 PACKAGE_ROOT="$ROOT/Packages/DeviceHubKit"
-PACKAGE_DERIVED_DATA="$(mktemp -d "${TMPDIR:-/tmp}/device-hub-periphery.XXXXXX")"
-trap 'rm -rf "$PACKAGE_DERIVED_DATA"' EXIT
-(
+PACKAGE_DERIVED_DATA="$DERIVED_DATA_PATH/Periphery/DeviceHubKit"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+PACKAGE_BUILD_LOG="$DERIVED_DATA_PATH/TestEvidence/Periphery/devicehub-kit-build-for-testing-$RUN_ID.log"
+mkdir -p "$PACKAGE_DERIVED_DATA" "$(dirname "$PACKAGE_BUILD_LOG")"
+
+local_statuses=()
+if (
   cd "$PACKAGE_ROOT"
   /usr/bin/xcodebuild \
     -quiet \
@@ -58,7 +64,23 @@ trap 'rm -rf "$PACKAGE_DERIVED_DATA"' EXIT
     build-for-testing \
     ONLY_ACTIVE_ARCH=YES \
     CODE_SIGNING_ALLOWED=NO
-)
+  ) 2>&1 | tee "$PACKAGE_BUILD_LOG"; then
+  local_statuses=("${PIPESTATUS[@]}")
+else
+  local_statuses=("${PIPESTATUS[@]}")
+fi
+if (( local_statuses[0] != 0 )); then
+  printf 'PERIPHERY_BUILD_FAILED xcodebuild_exit=%s tee_exit=%s raw_log=%s\n' \
+    "${local_statuses[0]}" "${local_statuses[1]}" "$PACKAGE_BUILD_LOG" >&2
+  exit "${local_statuses[0]}"
+fi
+if (( local_statuses[1] != 0 )); then
+  printf 'PERIPHERY_BUILD_OUTPUT_FAILED tee_exit=%s raw_log=%s\n' \
+    "${local_statuses[1]}" "$PACKAGE_BUILD_LOG" >&2
+  exit "${local_statuses[1]}"
+fi
+printf 'PERIPHERY_BUILD_OK raw_log=%s derived_data=%s\n' \
+  "$PACKAGE_BUILD_LOG" "$PACKAGE_DERIVED_DATA" >&2
 PACKAGE_INDEX_STORE="$PACKAGE_DERIVED_DATA/Index.noindex/DataStore"
 periphery scan \
   --project-root "$PACKAGE_ROOT" \

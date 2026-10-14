@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare one managed iOS simulator inside an approved lifecycle boundary."""
+"""Own one disposable simulator for a single Device Hub test run."""
 
 from __future__ import annotations
 
@@ -7,22 +7,29 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Mapping, Sequence
+import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 XCRUN = "/usr/bin/xcrun"
-MANAGED_SIMULATOR_NAME = "Device Hub Tests - Codex iPhone 17 Pro"
+SIMSLIM_PATH = "/opt/homebrew/bin/simslim"
+SIMSLIM_PROFILE_PATH = Path.home() / ".config" / "simslim" / "codex.json"
 IDENTIFIER_PATTERN = re.compile(
     r"[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}"
 )
+TASK_NAME_PATTERN = re.compile(r"[^A-Za-z0-9_-]+")
+TASK_MARKER = " - Codex "
 CommandRunner = Callable[[tuple[str, ...], bool], str]
+SimSlimConfiguration = tuple[str, Path]
 
 
 class SimulatorSetupError(RuntimeError):
-    """Raised when exact simulator ownership cannot be established."""
+    """Raised when the task cannot prove ownership of its simulator."""
 
 
 class CommandError(SimulatorSetupError):
@@ -31,7 +38,7 @@ class CommandError(SimulatorSetupError):
 
 @dataclass(frozen=True)
 class SimulatorDevice:
-    """The bounded device identity needed by the setup transaction."""
+    """The exact identity and current state returned by simctl."""
 
     identifier: str
     name: str
@@ -40,10 +47,10 @@ class SimulatorDevice:
 
 @dataclass(frozen=True)
 class PreparedSimulator:
-    """The simulator selected by setup and whether this invocation created it."""
+    """The task-owned simulator created and configured by this invocation."""
 
     identifier: str
-    created: bool
+    name: str
 
 
 def validate_identifier(value: object) -> str:
@@ -55,16 +62,19 @@ def validate_identifier(value: object) -> str:
 
 
 def subprocess_command(arguments: tuple[str, ...], check: bool = True) -> str:
-    """Run one bounded command and return its standard output."""
+    """Run one bounded simulator command and return its standard output."""
 
     operation = (
         f"simctl {arguments[2]}"
         if len(arguments) > 2 and arguments[1] == "simctl"
         else " ".join(arguments[:2])
     )
-    timeout_seconds = (
-        180 if len(arguments) > 2 and arguments[1:3] == ("simctl", "bootstatus") else 60
-    )
+    if arguments and Path(arguments[0]).name == "simslim":
+        timeout_seconds = 600 if len(arguments) > 1 and arguments[1] in {"on", "off"} else 60
+    else:
+        timeout_seconds = (
+            180 if len(arguments) > 2 and arguments[1:3] == ("simctl", "bootstatus") else 60
+        )
     try:
         result = subprocess.run(
             arguments,
@@ -130,21 +140,6 @@ def simulator_inventory(run_command: CommandRunner) -> tuple[SimulatorDevice, ..
     return tuple(devices)
 
 
-def managed_simulator(run_command: CommandRunner) -> SimulatorDevice | None:
-    """Find at most one exact managed simulator, rejecting ambiguity."""
-
-    matches = tuple(
-        device
-        for device in simulator_inventory(run_command)
-        if device.name == MANAGED_SIMULATOR_NAME
-    )
-    if len(matches) > 1:
-        raise SimulatorSetupError(
-            "managed simulator name did not resolve to exactly one device"
-        )
-    return matches[0] if matches else None
-
-
 def runtime_identifier(run_command: CommandRunner) -> str:
     """Select the newest available iOS 27 runtime deterministically."""
 
@@ -160,9 +155,7 @@ def runtime_identifier(run_command: CommandRunner) -> str:
         if isinstance(runtime, dict)
         and runtime.get("isAvailable") is True
         and isinstance(runtime.get("identifier"), str)
-        and runtime["identifier"].startswith(
-            "com.apple.CoreSimulator.SimRuntime.iOS-27-"
-        )
+        and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-27-")
     )
     if not candidates:
         raise SimulatorSetupError("no available iOS 27 simulator runtime")
@@ -175,74 +168,117 @@ def runtime_identifier(run_command: CommandRunner) -> str:
     )
 
 
-def device_type_identifier(run_command: CommandRunner) -> str:
-    """Select iPhone 17 Pro, or the newest available iPhone device type."""
+def device_type_identifier(
+    run_command: CommandRunner,
+    requested_name: str | None = None,
+) -> str:
+    """Select an exact requested model or the preferred iPhone model."""
 
     payload = json_command(
         run_command,
         (XCRUN, "simctl", "list", "devicetypes", "--json"),
     )
-    if not isinstance(payload, dict) or not isinstance(
-        payload.get("devicetypes"), list
-    ):
+    if not isinstance(payload, dict) or not isinstance(payload.get("devicetypes"), list):
         raise SimulatorSetupError("simctl device-type inventory is malformed")
     candidates = tuple(
         device
         for device in payload["devicetypes"]
         if isinstance(device, dict)
         and isinstance(device.get("name"), str)
-        and device["name"].startswith("iPhone ")
+        and device["name"].startswith(("iPhone ", "iPad "))
         and isinstance(device.get("identifier"), str)
     )
-    preferred = next(
-        (device for device in candidates if device["name"] == "iPhone 17 Pro"),
-        None,
-    )
-    selected = preferred or (candidates[-1] if candidates else None)
+    if requested_name is not None:
+        selected = next(
+            (device for device in candidates if device["name"] == requested_name),
+            None,
+        )
+        if selected is None:
+            raise SimulatorSetupError(
+                f"no exact iPhone or iPad simulator device type named {requested_name!r}"
+            )
+    else:
+        preferred = next(
+            (device for device in candidates if device["name"] == "iPhone 17 Pro"),
+            None,
+        )
+        selected = preferred or next(
+            (device for device in candidates if device["name"].startswith("iPhone ")),
+            None,
+        )
     if selected is None:
         raise SimulatorSetupError("no iPhone simulator device type")
     return selected["identifier"]
 
 
-def select_or_create_simulator(
-    run_command: CommandRunner,
-) -> PreparedSimulator:
-    """Reuse one exact managed device or create and verify it once."""
+def simslim_configuration() -> SimSlimConfiguration | None:
+    """Require the shared SimSlim binary and profile together on home Macs."""
 
-    existing = managed_simulator(run_command)
-    if existing is not None:
-        return PreparedSimulator(identifier=existing.identifier, created=False)
+    simslim = Path(SIMSLIM_PATH)
+    if not simslim.is_file():
+        discovered = shutil.which("simslim")
+        simslim = Path(discovered) if discovered else simslim
+    profile = Path(SIMSLIM_PROFILE_PATH)
+    simslim_available = simslim.is_file() and os.access(simslim, os.X_OK)
+    profile_available = profile.is_file()
+    if not simslim_available and not profile_available:
+        return None
+    if not simslim_available or not profile_available:
+        raise SimulatorSetupError(
+            "simslim and its profile must both be available before simulator setup"
+        )
+    return str(simslim), profile
+
+
+def task_simulator_name(task_name: str) -> str:
+    """Return a unique name that identifies this task-owned simulator."""
+
+    slug = TASK_NAME_PATTERN.sub("-", task_name).strip("-_")
+    if not slug:
+        raise SimulatorSetupError("simulator task name is invalid")
+    return f"{slug}{TASK_MARKER}{uuid.uuid4().hex[:10]}"
+
+
+def create_task_simulator(
+    *,
+    task_name: str,
+    run_command: CommandRunner,
+    device_type_name: str | None = None,
+) -> PreparedSimulator:
+    """Create and verify one fresh simulator rather than borrowing a device."""
+
+    name = task_simulator_name(task_name)
     identifier = validate_identifier(
         run_command(
             (
                 XCRUN,
                 "simctl",
                 "create",
-                MANAGED_SIMULATOR_NAME,
-                device_type_identifier(run_command),
+                name,
+                device_type_identifier(run_command, device_type_name),
                 runtime_identifier(run_command),
             ),
             True,
         ).strip()
     )
-    created = tuple(
+    matches = tuple(
         device
         for device in simulator_inventory(run_command)
-        if device.identifier == identifier and device.name == MANAGED_SIMULATOR_NAME
+        if device.identifier == identifier and device.name == name
     )
-    if len(created) != 1:
+    if len(matches) != 1:
         remove_unregistered_creation(run_command, identifier)
         raise SimulatorSetupError(
-            "created simulator UUID and managed name could not be verified"
+            "created simulator UUID and task-owned name could not be verified"
         )
-    return PreparedSimulator(identifier=identifier, created=True)
+    return PreparedSimulator(identifier=identifier, name=name)
 
 
 def remove_unregistered_creation(
     run_command: CommandRunner,
     identifier: str,
 ) -> None:
-    """Remove the exact new device if supervisor registration failed."""
+    """Remove only a newly created device that failed identity verification."""
 
     run_command((XCRUN, "simctl", "shutdown", identifier), False)
     run_command((XCRUN, "simctl", "delete", identifier), True)
@@ -251,101 +287,138 @@ def remove_unregistered_creation(
         device.identifier == identifier for device in simulator_inventory(run_command)
     ):
         if time.monotonic() >= deadline:
-            raise SimulatorSetupError(
-                "unregistered simulator could not be proven absent"
-            )
+            raise SimulatorSetupError("unregistered simulator could not be proven absent")
         time.sleep(0.05)
 
 
-def shared_lease_command(environment: Mapping[str, str]) -> str:
-    """Validate the authoritative supervisor environment."""
-
-    if not environment.get("CODEX_SIMULATOR_LEASE_ID"):
-        raise SimulatorSetupError("shared simulator lease identity is missing")
-    command = environment.get("CODEX_SIMULATOR_LEASE_COMMAND")
-    if not command or not os.path.isabs(command):
-        raise SimulatorSetupError("shared simulator lease command is invalid")
-    return command
-
-
-def prepare_shared_simulator(
-    *,
-    environment: Mapping[str, str],
-    run_command: CommandRunner = subprocess_command,
-) -> PreparedSimulator:
-    """Register and boot one device through the shared host supervisor."""
-
-    lease_command = shared_lease_command(environment)
-    prepared = select_or_create_simulator(run_command)
-    register = (
-        lease_command,
-        "register",
-        "--udid",
-        prepared.identifier,
-        "--name",
-        MANAGED_SIMULATOR_NAME,
-    )
-    if prepared.created:
-        register = (*register, "--created")
-    try:
-        run_command(register, True)
-    except Exception:
-        if prepared.created:
-            remove_unregistered_creation(run_command, prepared.identifier)
-        raise
-    run_command(
-        (lease_command, "boot", "--udid", prepared.identifier),
-        True,
-    )
-    return prepared
-
-
-def prepare_simulator(
-    *,
-    environment: Mapping[str, str],
-    run_command: CommandRunner = subprocess_command,
-) -> str:
-    """Compatibility entry point returning the shared simulator UUID."""
-
-    return prepare_shared_simulator(
-        environment=environment,
-        run_command=run_command,
-    ).identifier
-
-
-def validate_shared_simulator(
+def task_device(
     identifier: str,
+    name: str,
     *,
-    environment: Mapping[str, str],
-    run_command: CommandRunner = subprocess_command,
-) -> None:
-    """Prove an inherited UUID is the shared supervisor's active device."""
+    run_command: CommandRunner,
+    require_booted: bool = True,
+) -> SimulatorDevice:
+    """Prove the UDID and exact task-specific name still identify one device."""
 
     identifier = validate_identifier(identifier)
-    lease_command = shared_lease_command(environment)
+    if TASK_MARKER not in name:
+        raise SimulatorSetupError("simulator name does not identify a Codex task")
+    matches = tuple(
+        device
+        for device in simulator_inventory(run_command)
+        if device.identifier == identifier
+    )
+    if len(matches) != 1 or matches[0].name != name:
+        raise SimulatorSetupError("UDID does not match the task-owned simulator")
+    if require_booted and matches[0].state != "Booted":
+        raise SimulatorSetupError("task-owned simulator is not booted")
+    return matches[0]
+
+
+def apply_simslim_profile(
+    identifier: str,
+    configuration: SimSlimConfiguration,
+    *,
+    run_command: CommandRunner,
+) -> None:
+    """Apply and immediately verify the shared profile on one exact UDID."""
+
+    executable, profile = configuration
+    run_command(
+        (executable, "on", identifier, "--profile", str(profile)),
+        True,
+    )
+    run_command(
+        (executable, "verify", identifier, "--profile", str(profile)),
+        True,
+    )
+
+
+def verify_stock_status(
+    identifier: str,
+    configuration: SimSlimConfiguration,
+    *,
+    run_command: CommandRunner,
+) -> None:
+    """Require SimSlim to report the exact device back at stock state."""
+
+    executable, _profile = configuration
     payload = json_command(
         run_command,
-        (lease_command, "status", "--json"),
+        (executable, "status", "--json", identifier),
     )
     if (
         not isinstance(payload, dict)
-        or payload.get("active") is not True
-        or payload.get("active_udid") != identifier
+        or payload.get("booted") is not True
+        or payload.get("managedDisabled") != 0
+        or payload.get("verdict") != "stock"
     ):
-        raise SimulatorSetupError(
-            "inherited simulator is not active in the shared lease"
+        raise SimulatorSetupError("could not verify stock simulator services")
+
+
+def validate_task_simulator(
+    identifier: str,
+    name: str,
+    *,
+    run_command: CommandRunner = subprocess_command,
+) -> None:
+    """Validate nested test scripts inherited the task's exact active UDID."""
+
+    task_device(identifier, name, run_command=run_command)
+    configuration = simslim_configuration()
+    if configuration is not None:
+        executable, profile = configuration
+        run_command(
+            (executable, "verify", identifier, "--profile", str(profile)),
+            True,
         )
 
 
-def prepare_direct_simulator(
+def prepare_task_simulator(
     *,
+    task_name: str,
     run_command: CommandRunner = subprocess_command,
+    device_type_name: str | None = None,
 ) -> PreparedSimulator:
-    """Prepare a simulator on an isolated host without the shared supervisor."""
+    """Create and boot one exact task-owned simulator after build preflight."""
 
-    prepared = select_or_create_simulator(run_command)
-    run_command((XCRUN, "simctl", "boot", prepared.identifier), False)
-    run_command((XCRUN, "simctl", "bootstatus", prepared.identifier, "-b"), True)
+    configuration = simslim_configuration()
+    prepared = create_task_simulator(
+        task_name=task_name,
+        run_command=run_command,
+        device_type_name=device_type_name,
+    )
+    try:
+        if configuration is not None:
+            apply_simslim_profile(
+                prepared.identifier,
+                configuration,
+                run_command=run_command,
+            )
+        else:
+            run_command((XCRUN, "simctl", "boot", prepared.identifier), False)
+            run_command(
+                (XCRUN, "simctl", "bootstatus", prepared.identifier, "-b"),
+                True,
+            )
+        task_device(
+            prepared.identifier,
+            prepared.name,
+            run_command=run_command,
+        )
+    except Exception as setup_error:
+        try:
+            cleanup_task_simulator(
+                prepared.identifier,
+                prepared.name,
+                run_command=run_command,
+                configuration=configuration,
+            )
+        except Exception as cleanup_error:
+            raise SimulatorSetupError(
+                f"simulator setup failed and cleanup was not verified: {cleanup_error}"
+            ) from setup_error
+        raise
     return prepared
 
 
@@ -354,7 +427,7 @@ def wait_until_shutdown_or_absent(
     *,
     run_command: CommandRunner,
 ) -> None:
-    """Prove that the exact direct-mode simulator is no longer booted."""
+    """Prove the exact task-owned simulator is no longer booted."""
 
     deadline = time.monotonic() + 5
     while True:
@@ -370,66 +443,72 @@ def wait_until_shutdown_or_absent(
         time.sleep(0.05)
 
 
-def cleanup_direct_simulator(
+def cleanup_task_simulator(
     identifier: str,
+    name: str,
     *,
-    created: bool,
     run_command: CommandRunner = subprocess_command,
+    configuration: SimSlimConfiguration | None = None,
 ) -> None:
-    """Shutdown one direct-mode device and delete it only when newly created."""
+    """Restore stock services, then shut down and delete this task's device."""
 
     identifier = validate_identifier(identifier)
+    task_device(
+        identifier,
+        name,
+        run_command=run_command,
+        require_booted=False,
+    )
+    if configuration is None:
+        configuration = simslim_configuration()
+    if configuration is not None:
+        executable, _profile = configuration
+        run_command((executable, "off", identifier), True)
+        verify_stock_status(identifier, configuration, run_command=run_command)
     run_command((XCRUN, "simctl", "shutdown", identifier), False)
     wait_until_shutdown_or_absent(identifier, run_command=run_command)
-    if not created:
-        return
     run_command((XCRUN, "simctl", "delete", identifier), True)
     deadline = time.monotonic() + 5
     while any(
         device.identifier == identifier for device in simulator_inventory(run_command)
     ):
         if time.monotonic() >= deadline:
-            raise SimulatorSetupError("created simulator could not be proven absent")
+            raise SimulatorSetupError("task-owned simulator could not be proven absent")
         time.sleep(0.05)
 
 
 def parse_arguments(arguments: Sequence[str]) -> argparse.Namespace:
-    """Parse the small simulator setup CLI."""
+    """Parse the simulator helper's small task-owned lifecycle interface."""
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="operation", required=True)
     prepare = subparsers.add_parser("prepare")
-    prepare.add_argument("--mode", choices=("shared", "direct"), required=True)
-    validate = subparsers.add_parser("validate-shared")
+    prepare.add_argument("--name", required=True)
+    prepare.add_argument("--device-type")
+    validate = subparsers.add_parser("validate-task")
     validate.add_argument("--udid", required=True)
+    validate.add_argument("--name", required=True)
     cleanup = subparsers.add_parser("cleanup")
     cleanup.add_argument("--udid", required=True)
-    cleanup.add_argument("--created", action="store_true")
+    cleanup.add_argument("--name", required=True)
     return parser.parse_args(arguments)
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
-    """Prepare or clean one simulator for the shell harness."""
+    """Create, validate, or clean up the exact task-owned simulator."""
 
     namespace = parse_arguments(sys.argv[1:] if arguments is None else arguments)
     try:
         if namespace.operation == "prepare":
-            prepared = (
-                prepare_shared_simulator(environment=os.environ)
-                if namespace.mode == "shared"
-                else prepare_direct_simulator()
+            prepared = prepare_task_simulator(
+                task_name=namespace.name,
+                device_type_name=namespace.device_type,
             )
-            print(f"{prepared.identifier} {int(prepared.created)}")
-        elif namespace.operation == "validate-shared":
-            validate_shared_simulator(
-                namespace.udid,
-                environment=os.environ,
-            )
+            print(f"{prepared.identifier}\t1\t{prepared.name}")
+        elif namespace.operation == "validate-task":
+            validate_task_simulator(namespace.udid, namespace.name)
         else:
-            cleanup_direct_simulator(
-                namespace.udid,
-                created=namespace.created,
-            )
+            cleanup_task_simulator(namespace.udid, namespace.name)
     except (OSError, SimulatorSetupError, subprocess.SubprocessError) as error:
         print(f"Could not safely prepare the simulator: {error}", file=sys.stderr)
         return 125

@@ -7,10 +7,16 @@ PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 source "$PROCESS_GUARD"
 devicehub_require_guard test-live-ios 1200 "$0" "$@"
 
+# shellcheck source=BuildSupport/xcodebuild_test_output.sh
+source "$ROOT/BuildSupport/xcodebuild_test_output.sh"
+
 DESTINATION="${DESTINATION:-}"
-DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$ROOT/DerivedDataLiveTests}"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+EVIDENCE_ROOT="${DEVICE_HUB_TEST_EVIDENCE_DIR:-$DERIVED_DATA_PATH/TestEvidence/DeviceHub/$RUN_ID}"
 XCODEGEN_COMMAND="${XCODEGEN_COMMAND:-xcodegen}"
 XCODEBUILD_COMMAND="${XCODEBUILD_COMMAND:-/usr/bin/xcodebuild}"
+XCBEAUTIFY_COMMAND="${XCBEAUTIFY_COMMAND:-xcbeautify}"
 
 case "$DESTINATION" in
   "platform=iOS Simulator,"*) ;;
@@ -27,11 +33,44 @@ if [[ ! -d "$DEVELOPER_DIR" ]]; then
 fi
 export DEVELOPER_DIR
 
+if ! command -v "$XCBEAUTIFY_COMMAND" >/dev/null 2>&1; then
+  printf 'Required test formatter is unavailable: %s\n' "$XCBEAUTIFY_COMMAND" >&2
+  exit 127
+fi
+
 cd "$ROOT"
+REPOSITORY_ROOT="$(cd "$ROOT" && pwd -P)"
+if [[ "$EVIDENCE_ROOT" != /* ]]; then
+  printf 'Test evidence path must be absolute: %s\n' "$EVIDENCE_ROOT" >&2
+  exit 2
+fi
+case "$EVIDENCE_ROOT/" in
+  "$REPOSITORY_ROOT/"*)
+    printf 'Test evidence must be outside the repository: %s\n' "$EVIDENCE_ROOT" >&2
+    exit 2
+    ;;
+esac
+mkdir -p "$EVIDENCE_ROOT"
+EVIDENCE_ROOT="$(cd "$EVIDENCE_ROOT" && pwd -P)"
+case "$EVIDENCE_ROOT/" in
+  "$REPOSITORY_ROOT/"*)
+    printf 'Test evidence must be outside the repository: %s\n' "$EVIDENCE_ROOT" >&2
+    exit 2
+    ;;
+esac
+RAW_LOG="$EVIDENCE_ROOT/devicehub-live-tests-$RUN_ID.log"
+RESULT_BUNDLE="$EVIDENCE_ROOT/devicehub-live-tests-$RUN_ID.xcresult"
+printf 'Test evidence: %s\n' "$EVIDENCE_ROOT"
+
 "$XCODEGEN_COMMAND" generate
 set +e
-"$XCODEBUILD_COMMAND" test \
-  -quiet \
+devicehub_run_xcodebuild_test \
+  devicehub-live-tests \
+  "$RAW_LOG" \
+  "$RESULT_BUNDLE" \
+  "$XCBEAUTIFY_COMMAND" \
+  "$XCODEBUILD_COMMAND" \
+  test \
   -project "$ROOT/DeviceHub.xcodeproj" \
   -scheme DeviceHub \
   -configuration Debug \

@@ -341,35 +341,86 @@ def process_session_members(
 ) -> tuple[ProcessSessionMember, ...]:
     """Return processes that still belong to one operation-owned POSIX session.
 
-    Process IDs, parent IDs, and executable paths are requested. Arguments and
+    First enumerate only PIDs and parent PIDs, then request executable paths
+    only for PIDs whose session ownership was verified. Arguments and
     environments are intentionally never read.
     """
 
-    try:
-        inspection = subprocess.run(
-            [
-                str(process_status_executable()),
-                "-axo",
-                "pid=,ppid=,comm=",
-            ],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=PROCESS_INSPECTION_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise OSError("could not inspect the guarded process session") from error
-    if inspection.returncode != 0:
-        raise OSError("could not inspect the guarded process session")
+    process_status = process_status_executable()
 
-    members: list[ProcessSessionMember] = []
-    for process_line in inspection.stdout.splitlines():
-        fields = process_line.strip().split(maxsplit=2)
-        if len(fields) != 3 or not fields[0].isdecimal() or not fields[1].isdecimal():
+    def inspect(
+        arguments: list[str],
+        *,
+        allow_no_match: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        try:
+            result = subprocess.run(
+                arguments,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=PROCESS_INSPECTION_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise OSError(
+                "process inspection timed out after "
+                f"{PROCESS_INSPECTION_TIMEOUT_SECONDS:g} seconds"
+            ) from error
+        except OSError as error:
+            raise OSError("could not start process inspection") from error
+        if result.returncode != 0 and not (
+            allow_no_match and result.returncode == 1 and not result.stdout
+        ):
+            raise OSError(
+                f"process inspection exited with status {result.returncode}"
+            )
+        return result
+
+    inventory = inspect([str(process_status), "-axo", "pid=,ppid="])
+    candidate_ids: list[int] = []
+    for process_line in inventory.stdout.splitlines():
+        fields = process_line.strip().split()
+        if len(fields) != 2 or not all(field.isdecimal() for field in fields):
             raise OSError("process inspection returned malformed metadata")
         process_id = int(fields[0])
-        parent_process_id = int(fields[1])
+        try:
+            if os.getsid(process_id) == process_session_id:
+                candidate_ids.append(process_id)
+        except ProcessLookupError:
+            continue
+        except PermissionError as error:
+            raise OSError(
+                "could not validate guarded process session ownership"
+            ) from error
+
+    if not candidate_ids:
+        return ()
+
+    details = inspect(
+        [
+            str(process_status),
+            "-p",
+            ",".join(str(process_id) for process_id in candidate_ids),
+            "-o",
+            "pid=,ppid=,comm=",
+        ],
+        allow_no_match=True,
+    )
+    members: list[ProcessSessionMember] = []
+    returned_ids: set[int] = set()
+    for process_line in details.stdout.splitlines():
+        fields = process_line.strip().split(maxsplit=2)
+        if (
+            len(fields) != 3
+            or not fields[0].isdecimal()
+            or not fields[1].isdecimal()
+        ):
+            raise OSError("process inspection returned malformed metadata")
+        process_id = int(fields[0])
+        if process_id not in candidate_ids or process_id in returned_ids:
+            raise OSError("process inspection returned an unexpected process")
+        returned_ids.add(process_id)
         try:
             session_id = os.getsid(process_id)
         except ProcessLookupError:
@@ -382,10 +433,20 @@ def process_session_members(
             members.append(
                 ProcessSessionMember(
                     process_id=process_id,
-                    parent_process_id=parent_process_id,
+                    parent_process_id=int(fields[1]),
                     executable_path=Path(fields[2]),
                 )
             )
+
+    # Both macOS and procps ps can omit a PID that exited after enumeration.
+    # Treat that race as empty only after a fresh ownership check confirms no
+    # candidate still belongs to the session.
+    omitted_ids = set(candidate_ids) - returned_ids
+    if any(
+        process_is_session_member(process_id, process_session_id)
+        for process_id in omitted_ids
+    ):
+        raise OSError("process inspection omitted live session members")
     return tuple(members)
 
 

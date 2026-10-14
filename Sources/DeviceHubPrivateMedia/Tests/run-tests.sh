@@ -13,11 +13,11 @@ devicehub_require_guard private-media-tests 900 "$0" "$@"
 ROOT="$repository_root"
 # shellcheck source=BuildSupport/simulator_guard.sh
 source "$repository_root/BuildSupport/simulator_guard.sh"
-devicehub_require_simulator device-hub-private-media-tests 900 "$0" "$@"
+devicehub_require_simulator device-hub-private-media-tests
 
 temp_root=${TMPDIR:-/tmp}
 work_dir=$(mktemp -d "$temp_root/devicehub-private-media.XXXXXX")
-simulator_udid=${DEVICE_HUB_SIMULATOR_UDID:?simulator lease did not provide a UDID}
+simulator_udid=${DEVICE_HUB_SIMULATOR_UDID:?simulator setup did not provide a UDID}
 
 cleanup() {
   local status=$?
