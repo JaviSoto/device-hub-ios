@@ -110,7 +110,6 @@ cleanup() { rm -rf "$VERIFY_DIR"; }
 trap cleanup EXIT
 
 UPLOAD_ARGUMENTS=(
-  --api-url "$API_BASE_URL" \
   --platform ios \
   --artifact "$IPA" \
   --manifest "$MANIFEST" \

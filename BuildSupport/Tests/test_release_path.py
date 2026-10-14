@@ -32,7 +32,7 @@ class ReleasePathTests(unittest.TestCase):
             publish,
         )
         self.assertIn('API_BASE_URL="https://api.builds.lan"', publish)
-        self.assertIn("--api-url \"$API_BASE_URL\"", publish)
+        self.assertNotIn("--api-url", publish)
         self.assertIn("--platform ios", publish)
         self.assertIn("--manifest \"$MANIFEST\"", publish)
         self.assertIn("--token-file \"$UPLOAD_TOKEN_FILE\"", publish)
@@ -218,7 +218,7 @@ class ReleasePathTests(unittest.TestCase):
                 "from pathlib import Path\n"
                 "args = sys.argv[1:]\n"
                 "assert '--token-file' not in args\n"
-                "assert args[args.index('--api-url') + 1] == 'https://api.builds.lan'\n"
+                "assert '--api-url' not in args\n"
                 "assert args[args.index('--platform') + 1] == 'ios'\n"
                 "artifact = Path(args[args.index('--artifact') + 1])\n"
                 "token = json.load(os.fdopen(int(os.environ['CODEX_SECRET_FD'])))['token']\n"
