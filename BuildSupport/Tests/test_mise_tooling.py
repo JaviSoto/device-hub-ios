@@ -61,6 +61,12 @@ class MiseToolingContractTests(unittest.TestCase):
             steps,
         )
 
+    def test_preview_gate_requires_the_current_screen_first_ipad_layout(self) -> None:
+        script = (ROOT / "Scripts" / "render-local-previews.sh").read_text()
+
+        self.assertIn('item["layout"] == "single-column"', script)
+        self.assertNotIn('two-column', script)
+
 
 if __name__ == "__main__":
     unittest.main()

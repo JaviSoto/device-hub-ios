@@ -204,10 +204,10 @@ if {str(item["device_class"]) for item in catalog} != {"iPad", "iPhone"}:
 if not any(
     item["device_class"] == "iPad"
     and item["orientation"] == "landscape"
-    and item["layout"] == "two-column"
+    and item["layout"] == "single-column"
     for item in catalog
 ):
-    raise SystemExit("Preview renderer is missing the iPad two-column surface")
+    raise SystemExit("Preview renderer is missing the full-window iPad surface")
 if not any(item["dynamic_type"] == "accessibility3" for item in catalog):
     raise SystemExit("Preview renderer is missing accessibility Dynamic Type")
 artifacts = []
