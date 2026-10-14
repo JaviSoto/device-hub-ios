@@ -7,6 +7,32 @@ import UIKit
 @MainActor
 @Suite("Device keyboard responder lifecycle")
 struct DeviceKeyboardResponderTests {
+    @Test("System keyboard dismissal clears the requested presentation exactly once")
+    func systemDismissalClearsPresentation() {
+        let textField = DeviceKeyboardTextField()
+        var dismissals = 0
+        textField.onDone = { dismissals += 1 }
+        textField.setPresented(true)
+
+        textField.delegate?.textFieldDidEndEditing?(textField)
+        textField.delegate?.textFieldDidEndEditing?(textField)
+
+        #expect(dismissals == 1)
+    }
+
+    @Test("An app-requested close does not emit another system dismissal")
+    func requestedCloseDoesNotRepeatDismissal() {
+        let textField = DeviceKeyboardTextField()
+        var dismissals = 0
+        textField.onDone = { dismissals += 1 }
+        textField.setPresented(true)
+        textField.setPresented(false)
+
+        textField.delegate?.textFieldDidEndEditing?(textField)
+
+        #expect(dismissals == 0)
+    }
+
     @Test("Software-keyboard edits are intercepted without retaining text")
     func softwareKeyboardEditInterception() {
         let textField = DeviceKeyboardTextField()

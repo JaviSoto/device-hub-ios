@@ -8,29 +8,15 @@ import Testing
 
 @Suite("Device Hub presentation")
 struct DeviceHubUIPresentationTests {
-    @Test("Compact windows make the remote session the navigation root")
-    func adaptiveNavigation() {
-        #expect(
-            DeviceHubNavigationLayout(
-                horizontalSizeClass: .compact,
-                verticalSizeClass: .regular
-            )
-                == .remoteSessionOnly
-        )
-        #expect(
-            DeviceHubNavigationLayout(
-                horizontalSizeClass: .regular,
-                verticalSizeClass: .regular
-            )
-                == .sidebarAndSession
-        )
-        #expect(
-            DeviceHubNavigationLayout(
-                horizontalSizeClass: .regular,
-                verticalSizeClass: .compact
-            )
-                == .remoteSessionOnly
-        )
+    @Test("Only a healthy live session fades its centered identity after three seconds")
+    func healthyHeaderFades() {
+        let selected = device(id: "selected", name: "Test iPhone", pairing: .paired, reachability: .reachable)
+        #expect(RemoteSessionToolbarPresentation.session(device: selected, presentation: .live).headerDismissalDelay == .seconds(3))
+        #expect(RemoteSessionToolbarPresentation.noSelection.headerDismissalDelay == nil)
+        #expect(RemoteSessionToolbarPresentation.pairingRequired(selected).headerDismissalDelay == nil)
+        #expect(RemoteSessionToolbarPresentation.viewingStopped(selected).headerDismissalDelay == nil)
+        #expect(RemoteSessionToolbarPresentation.session(device: selected, presentation: .offline).headerDismissalDelay == nil)
+        #expect(RemoteSessionToolbarPresentation.session(device: selected, presentation: .connecting(.locating)).headerDismissalDelay == nil)
     }
 
     @Test("Accessibility text opens pairing at the large detent")

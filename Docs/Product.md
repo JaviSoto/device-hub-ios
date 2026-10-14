@@ -47,25 +47,24 @@ There is no dashboard and no Devices, Control, Logs, or Settings tab bar.
 
 ## Primary controls
 
-The persistent control bar contains no more than five actions:
+The floating control bar contains four actions:
 
 1. Home
 2. Lock
 3. Keyboard
 4. Rotate
-5. More
+
+The More menu stays close to the top-right corner.
 
 Secondary hardware controls, capture actions, reconnect, and stop-viewing live
 inside menus.
 
 ## Platform adaptation
 
-- iPhone uses one remote-session screen. Device selection and details are
-  sheets.
-- iPhone landscape uses compact overlays in letterboxed space rather than a
-  desktop sidebar.
-- iPad uses a collapsible 280–320 point device sidebar and one remote-canvas
-  detail. Narrow Stage Manager windows collapse to the iPhone navigation shape.
+- iPhone and iPad use one full-window remote-session screen. The More menu
+  contains device selection. Device details use a sheet.
+- iPhone landscape places the hardware controls along the trailing edge.
+- Portrait and iPad windows place the controls near the bottom edge.
 - Both platforms support light and dark appearance, Dynamic Type, portrait and
   landscape targets, reduced motion, VoiceOver, and hardware keyboards.
 
@@ -80,4 +79,5 @@ The following block release even when the underlying protocol works:
 - thick device bezels or a terminal-style developer aesthetic;
 - indefinite progress without a timeout or useful remedy;
 - iPad merely stretching the iPhone layout;
-- app chrome obscuring tappable remote content.
+- app chrome that reserves space around the device image or covers more than
+  the small floating controls require.

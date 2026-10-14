@@ -193,6 +193,17 @@ struct DeviceKeyboardReceiver: View {
             return false
         }
 
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            guard textField === self, isPresentationRequested else {
+                return
+            }
+            // UIKit can dismiss the keyboard independently of our button.
+            // Clear the binding so the next tap requests an open, not a close.
+            isPresentationRequested = false
+            releasePressedSpecialKeys()
+            onDone()
+        }
+
         private func configure() {
             accessibilityElementsHidden = true
             isAccessibilityElement = false
@@ -236,9 +247,8 @@ struct DeviceKeyboardReceiver: View {
             let toolbar = UIToolbar()
             toolbar.items = [
                 accessoryButton("Done") { [weak self] in
-                    self?.releasePressedSpecialKeys()
+                    self?.setPresented(false)
                     self?.onDone()
-                    _ = self?.resignFirstResponder()
                 },
                 UIBarButtonItem(systemItem: .flexibleSpace),
                 accessoryButton("Esc") { [weak self] in

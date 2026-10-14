@@ -61,6 +61,7 @@
         var appearance: UIUserInterfaceStyle {
             switch self {
             case .emptyIPhoneLight,
+                 .liveIPadLight,
                  .connectingIPhoneLight,
                  .deviceDetailsPendingVersionIPadLight,
                  .aboutNoticesIPadLight,
@@ -71,6 +72,7 @@
                  .viewingOnlyIPadLight:
                 .light
             case .pairingIPhoneDark,
+                 .liveIPadDark,
                  .liveIPhoneDark,
                  .liveLandscapeIPadTargetIPhoneDark,
                  .offlineIPhoneDark,
@@ -85,6 +87,8 @@
         var idiom: UIUserInterfaceIdiom {
             switch self {
             case .developerModeIPadAccessibility,
+                 .liveIPadLight,
+                 .liveIPadDark,
                  .deviceDetailsPendingVersionIPadLight,
                  .aboutNoticesIPadLight,
                  .developerImageUnavailableIPadLight,

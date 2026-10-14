@@ -13,7 +13,6 @@ enum PreviewDynamicType: String, CaseIterable, Codable, Hashable {
 
 enum PreviewLayout: String, CaseIterable, Codable, Hashable {
     case singleColumn = "single-column"
-    case twoColumn = "two-column"
 }
 
 enum PreviewOrientation: String, CaseIterable, Codable, Hashable {
@@ -163,7 +162,7 @@ struct PreviewScenario: Equatable, Hashable {
             deviceClass: .iPad,
             dynamicType: dynamicType,
             id: id,
-            layout: .twoColumn,
+            layout: .singleColumn,
             orientation: .landscape,
             remoteScreen: .phonePortrait,
             state: state,

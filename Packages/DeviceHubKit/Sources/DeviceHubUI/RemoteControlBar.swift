@@ -15,16 +15,9 @@ struct RemoteControlBar: View {
 
     let layout: Layout
     let acceptsInput: Bool
-    let isViewingStopped: Bool
-    let hasActiveSession: Bool
-    let aboutButtonTapped: () -> Void
     let buttonTapped: (DeviceButton) -> Void
-    let detailsButtonTapped: () -> Void
     let keyboardButtonTapped: () -> Void
-    let reconnectButtonTapped: () -> Void
     let rotateButtonTapped: () -> Void
-    let startViewingButtonTapped: () -> Void
-    let stopViewingButtonTapped: () -> Void
 
     var body: some View {
         GlassEffectContainer(spacing: 6) {
@@ -69,18 +62,6 @@ struct RemoteControlBar: View {
             systemImage: "rotate.right",
             action: rotateButtonTapped
         )
-        RemoteSessionMenu(
-            labelStyle: .floating,
-            acceptsInput: acceptsInput,
-            isViewingStopped: isViewingStopped,
-            hasActiveSession: hasActiveSession,
-            aboutButtonTapped: aboutButtonTapped,
-            buttonTapped: buttonTapped,
-            detailsButtonTapped: detailsButtonTapped,
-            reconnectButtonTapped: reconnectButtonTapped,
-            startViewingButtonTapped: startViewingButtonTapped,
-            stopViewingButtonTapped: stopViewingButtonTapped
-        )
     }
 
     private func controlButton(
@@ -120,39 +101,52 @@ struct RemoteControlBar: View {
     }
 }
 
-/// Shared secondary controls for both the phone rail and native iPad toolbar.
+/// The persistent corner menu owns device switching and secondary options.
 struct RemoteSessionMenu: View {
-    enum LabelStyle {
-        case floating
-        case toolbar
-    }
-
-    let labelStyle: LabelStyle
     let acceptsInput: Bool
     let isViewingStopped: Bool
     let hasActiveSession: Bool
+    let devices: [DeviceSummary]
+    let selectedDeviceID: DeviceID?
     let aboutButtonTapped: () -> Void
     let buttonTapped: (DeviceButton) -> Void
+    let deviceSelected: (DeviceID) -> Void
     let detailsButtonTapped: () -> Void
+    let pairButtonTapped: () -> Void
     let reconnectButtonTapped: () -> Void
     let startViewingButtonTapped: () -> Void
     let stopViewingButtonTapped: () -> Void
 
     var body: some View {
-        switch labelStyle {
-        case .floating:
-            menu
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .modifier(RemoteFloatingControlSurface(isEnabled: true))
-
-        case .toolbar:
-            menu
-        }
+        menu
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.85))
+            .modifier(RemoteFloatingControlSurface(isEnabled: true))
     }
 
     private var menu: some View {
         Menu {
+            Section("Devices") {
+                if !devices.isEmpty {
+                    Menu("Choose Device", systemImage: "iphone.and.ipad") {
+                        ForEach(devices) { device in
+                            Button {
+                                deviceSelected(device.id)
+                            } label: {
+                                Label(
+                                    device.name,
+                                    systemImage: device.id == selectedDeviceID
+                                        ? "checkmark"
+                                        : device.deviceHubAvailabilitySymbol
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Button("Pair Nearby Device", systemImage: "plus", action: pairButtonTapped)
+            }
+
             Section("Device Hub") {
                 Button(
                     "About Device Hub",
@@ -179,11 +173,13 @@ struct RemoteSessionMenu: View {
             }
 
             Section("Session") {
-                Button(
-                    "Device Details",
-                    systemImage: "info.circle",
-                    action: detailsButtonTapped
-                )
+                if selectedDeviceID != nil {
+                    Button(
+                        "Device Details",
+                        systemImage: "info.circle",
+                        action: detailsButtonTapped
+                    )
+                }
 
                 if isViewingStopped {
                     Button(
@@ -206,20 +202,13 @@ struct RemoteSessionMenu: View {
                 }
             }
         } label: {
-            switch labelStyle {
-            case .floating:
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(
-                        width: RemoteControlBarMetrics.minimumTargetDimension,
-                        height: RemoteControlBarMetrics.minimumTargetDimension
-                    )
-                    .contentShape(.circle)
-
-            case .toolbar:
-                Label("More Controls", systemImage: "ellipsis")
-                    .labelStyle(.iconOnly)
-            }
+            Image(systemName: "ellipsis")
+                .font(.system(size: 14, weight: .medium))
+                .frame(
+                    width: RemoteControlBarMetrics.minimumTargetDimension,
+                    height: RemoteControlBarMetrics.minimumTargetDimension
+                )
+                .contentShape(.circle)
         }
         .accessibilityLabel("More Controls")
     }

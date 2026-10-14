@@ -10,15 +10,12 @@ import SwiftUI
 /// command remain owned by ``RemoteSessionFeature``.
 public struct DeviceHubView: View {
     @Bindable private var store: StoreOf<RemoteSessionFeature>
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var detailsDevice: DeviceSummary?
     @State private var externalRemediation: ExternalRemediationRequest?
     @State private var isAboutPresented = false
     @State private var isKeyboardPresented = false
-    @State private var preferredCompactColumn = NavigationSplitViewColumn.detail
 
     private let aboutContent: DeviceHubAboutContent
     private let remoteDiagnostics: DeviceHubRemoteDiagnosticsSettings
@@ -138,38 +135,9 @@ public struct DeviceHubView: View {
             }
     }
 
-    @ViewBuilder
     private var navigationRoot: some View {
-        switch DeviceHubNavigationLayout(
-            horizontalSizeClass: horizontalSizeClass,
-            verticalSizeClass: verticalSizeClass
-        ) {
-        case .remoteSessionOnly:
-            NavigationStack {
-                remoteSession
-            }
-
-        case .sidebarAndSession:
-            NavigationSplitView(
-                preferredCompactColumn: $preferredCompactColumn
-            ) {
-                DeviceSidebar(
-                    devices: store.roster.devices,
-                    isLoading: store.isLoadingRoster,
-                    selectedDeviceID: store.selectedDeviceID,
-                    detailsButtonTapped: detailsButtonTapped,
-                    deviceSelected: deviceSelected,
-                    pairButtonTapped: pairButtonTapped
-                )
-                .navigationSplitViewColumnWidth(
-                    min: 280,
-                    ideal: 300,
-                    max: 320
-                )
-            } detail: {
-                remoteSession
-            }
-            .navigationSplitViewStyle(.balanced)
+        NavigationStack {
+            remoteSession
         }
     }
 
@@ -194,13 +162,6 @@ public struct DeviceHubView: View {
     private func aboutButtonTapped() {
         isKeyboardPresented = false
         isAboutPresented = true
-    }
-
-    private func detailsButtonTapped(_ device: DeviceSummary) {
-        detailsDevice = device
-        if device.id == store.selectedDeviceID {
-            store.send(.detailsButtonTapped)
-        }
     }
 
     private func detailsDeviceIDChanged(
@@ -252,11 +213,6 @@ public struct DeviceHubView: View {
             return
         }
         store.send(.externalRemediationHandled(request.id))
-    }
-
-    private func deviceSelected(_ deviceID: DeviceID) {
-        store.send(.deviceSelected(deviceID))
-        preferredCompactColumn = .detail
     }
 
     private func pairButtonTapped() {
@@ -315,23 +271,6 @@ private struct PairingScreenIdleTimerModifier: ViewModifier {
         #else
             content
         #endif
-    }
-}
-
-/// Chooses the platform navigation shape without coupling feature state to
-/// transient window geometry.
-enum DeviceHubNavigationLayout: Equatable {
-    case remoteSessionOnly
-    case sidebarAndSession
-
-    init(
-        horizontalSizeClass: UserInterfaceSizeClass?,
-        verticalSizeClass: UserInterfaceSizeClass? = nil
-    ) {
-        self = horizontalSizeClass == .compact
-            || verticalSizeClass == .compact
-            ? .remoteSessionOnly
-            : .sidebarAndSession
     }
 }
 

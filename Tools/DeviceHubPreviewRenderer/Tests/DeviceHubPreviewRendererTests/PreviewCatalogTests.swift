@@ -18,7 +18,7 @@ struct PreviewCatalogTests {
             scenarios.contains {
                 $0.deviceClass == .iPad
                     && $0.orientation == .landscape
-                    && $0.layout == .twoColumn
+                    && $0.layout == .singleColumn
             }
         )
         #expect(

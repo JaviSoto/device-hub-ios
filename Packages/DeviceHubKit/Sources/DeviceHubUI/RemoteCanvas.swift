@@ -131,12 +131,7 @@ struct RemoteCanvas: View {
                 }
             }
             .frame(width: screenSize.width, height: screenSize.height)
-            .clipShape(.rect(cornerRadius: 7))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7)
-                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.42), radius: 20, y: 8)
+            .clipped()
             .overlay {
                 RemoteInputSurface(
                     touchLedger: $touchLedger,

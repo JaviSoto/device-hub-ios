@@ -8,6 +8,8 @@ struct RemoteSessionView: View {
     @Binding var isKeyboardPresented: Bool
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHeaderVisible = true
 
     let aboutButtonTapped: () -> Void
     let detailsButtonTapped: () -> Void
@@ -15,66 +17,43 @@ struct RemoteSessionView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let chromeLayout = RemoteSessionChromeLayout(
+            let layout = RemoteSessionChromeLayout(
                 containerSize: geometry.size,
                 horizontalSizeClass: horizontalSizeClass,
                 verticalSizeClass: verticalSizeClass
             )
 
-            configuredContent(chromeLayout)
+            ZStack {
+                canvas.ignoresSafeArea(.container)
+
+                sessionOverlays(layout)
+            }
         }
         .background {
-            RemoteCanvasColor.value
-                .ignoresSafeArea()
+            RemoteCanvasColor.value.ignoresSafeArea()
         }
-        .onChange(
-            of: store.selectedDeviceID,
-            selectedDeviceIDChanged
-        )
+        .deviceHubHiddenNavigationBar()
+        .onChange(of: store.selectedDeviceID, selectedDeviceIDChanged)
         .onChange(of: store.acceptsInput, acceptsInputChanged)
-    }
-
-    @ViewBuilder
-    private func sessionContent(
-        _ chromeLayout: RemoteSessionChromeLayout
-    ) -> some View {
-        switch chromeLayout {
-        case .nativeToolbar:
-            canvas(screenInset: chromeLayout.screenInset)
-
-        case .floatingTrailingRail:
-            canvas(screenInset: chromeLayout.screenInset)
-                .overlay(alignment: .topLeading) {
-                    floatingHeader
-                        .padding(.leading, 8)
-                        .padding(.top, 8)
-                }
-                .overlay(alignment: .trailing) {
-                    if store.selectedDevice != nil {
-                        controls()
-                            .padding(.trailing, 8)
-                    }
-                }
-
-        case .portraitBottomDock:
-            VStack(spacing: 6) {
-                floatingHeader
-                    .frame(maxWidth: .infinity)
-
-                canvas(screenInset: chromeLayout.screenInset)
-
-                if store.selectedDevice != nil {
-                    controls(layout: .horizontalDock)
-                }
+        .task(id: store.toolbarPresentation) {
+            isHeaderVisible = true
+            guard let delay = store.toolbarPresentation.headerDismissalDelay else {
+                return
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 8)
-            .padding(.top, chromeLayout.topChromePadding)
-            .padding(.bottom, 8)
+            do {
+                try await Task.sleep(for: delay)
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.35)) {
+                    isHeaderVisible = false
+                }
+            } catch is CancellationError {
+                // A target/status change cancels the old header's dismissal.
+            } catch {
+                assertionFailure("Header dismissal failed: \(error)")
+            }
         }
     }
 
-    private func canvas(screenInset: CGFloat) -> some View {
+    private var canvas: some View {
         ZStack {
             RemoteCanvas(
                 acceptsInput: store.acceptsInput,
@@ -83,7 +62,7 @@ struct RemoteSessionView: View {
                 isViewingStopped: store.isViewingStopped,
                 presentation: store.sessionPresentation,
                 remediation: store.remediation,
-                screenInset: screenInset,
+                screenInset: 0,
                 pairButtonTapped: pairButtonTapped,
                 remediationButtonTapped: remediationButtonTapped,
                 remediationDismissed: remediationDismissed,
@@ -106,153 +85,75 @@ struct RemoteSessionView: View {
         }
     }
 
-    private var floatingHeader: some View {
-        deviceTitleMenu(
-            usesCompactLabel: true,
-            usesHighContrastForeground: true
-        )
-        .padding(.horizontal, 8)
-        .foregroundStyle(.white)
-        .background(.black.opacity(0.62), in: .capsule)
-        .glassEffect(.regular, in: .capsule)
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-    }
-
-    private func deviceTitleMenu(
-        usesCompactLabel: Bool = false,
-        usesHighContrastForeground: Bool
-    ) -> some View {
-        DeviceTitleMenu(
-            devices: store.roster.devices,
-            presentation: store.toolbarPresentation,
-            usesCompactLabel: usesCompactLabel,
-            usesHighContrastForeground: usesHighContrastForeground,
-            deviceSelected: deviceSelected,
-            pairButtonTapped: pairButtonTapped
-        )
-    }
-
-    private func controls(
-        layout: RemoteControlBar.Layout = .verticalRail
-    ) -> some View {
-        RemoteControlBar(
-            layout: layout,
-            acceptsInput: store.acceptsInput,
-            isViewingStopped: store.isViewingStopped,
-            hasActiveSession: store.session != nil,
-            aboutButtonTapped: aboutButtonTapped,
-            buttonTapped: hardwareButtonTapped,
-            detailsButtonTapped: detailsButtonTapped,
-            keyboardButtonTapped: keyboardButtonTapped,
-            reconnectButtonTapped: reconnectButtonTapped,
-            rotateButtonTapped: rotateButtonTapped,
-            startViewingButtonTapped: startViewingButtonTapped,
-            stopViewingButtonTapped: stopViewingButtonTapped
-        )
-    }
-
-    @ViewBuilder
-    private func configuredContent(
-        _ chromeLayout: RemoteSessionChromeLayout
-    ) -> some View {
-        #if os(iOS)
-            switch chromeLayout {
-            case .nativeToolbar:
-                sessionContent(chromeLayout)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        nativeToolbar
-                    }
-                    .toolbar(.visible, for: .navigationBar)
-                    .toolbarBackground(
-                        RemoteCanvasColor.value,
-                        for: .navigationBar
-                    )
-                    .toolbarBackground(.visible, for: .navigationBar)
-                    .toolbarColorScheme(.dark, for: .navigationBar)
-
-            case .floatingTrailingRail,
-                 .portraitBottomDock:
-                sessionContent(chromeLayout)
-                    .toolbar(.hidden, for: .navigationBar)
+    private func sessionOverlays(_ layout: RemoteSessionChromeLayout) -> some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .overlay(alignment: .top) {
+                floatingHeader
+                    .padding(.horizontal, 56)
+                    .padding(.top, 8)
             }
-        #else
-            sessionContent(chromeLayout)
-        #endif
-    }
-
-    @ToolbarContentBuilder
-    private var nativeToolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            deviceTitleMenu(usesHighContrastForeground: true)
-        }
-
-        if store.selectedDevice != nil {
-            ToolbarItemGroup(placement: .primaryAction) {
-                nativeToolbarButton(
-                    title: "Home",
-                    systemImage: "house",
-                    symbolPointSize: 13,
-                    action: homeButtonTapped
-                )
-
-                nativeToolbarButton(
-                    title: "Lock",
-                    systemImage: "lock",
-                    action: lockButtonTapped
-                )
-
-                nativeToolbarButton(
-                    title: "Keyboard",
-                    systemImage: "keyboard",
-                    action: keyboardButtonTapped
-                )
-
-                nativeToolbarButton(
-                    title: "Rotate",
-                    systemImage: "rotate.right",
-                    action: rotateButtonTapped
-                )
-
+            .overlay(alignment: .topTrailing) {
                 RemoteSessionMenu(
-                    labelStyle: .toolbar,
                     acceptsInput: store.acceptsInput,
                     isViewingStopped: store.isViewingStopped,
                     hasActiveSession: store.session != nil,
+                    devices: store.roster.devices,
+                    selectedDeviceID: store.selectedDeviceID,
                     aboutButtonTapped: aboutButtonTapped,
                     buttonTapped: hardwareButtonTapped,
+                    deviceSelected: deviceSelected,
                     detailsButtonTapped: detailsButtonTapped,
+                    pairButtonTapped: pairButtonTapped,
                     reconnectButtonTapped: reconnectButtonTapped,
                     startViewingButtonTapped: startViewingButtonTapped,
                     stopViewingButtonTapped: stopViewingButtonTapped
                 )
+                .padding(6)
             }
-        }
+            .overlay(alignment: layout == .floatingTrailingRail ? .trailing : .bottom) {
+                if store.selectedDevice != nil {
+                    RemoteControlBar(
+                        layout: layout == .floatingTrailingRail ? .verticalRail : .horizontalDock,
+                        acceptsInput: store.acceptsInput,
+                        buttonTapped: hardwareButtonTapped,
+                        keyboardButtonTapped: keyboardButtonTapped,
+                        rotateButtonTapped: rotateButtonTapped
+                    )
+                    .padding(8)
+                }
+            }
     }
 
-    private func nativeToolbarButton(
-        title: String,
-        systemImage: String,
-        symbolPointSize: CGFloat = 17,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: symbolPointSize, weight: .semibold))
-                .frame(width: 22, height: 22)
+    @ViewBuilder
+    private var floatingHeader: some View {
+        let content = DeviceTitleContent(presentation: store.toolbarPresentation)
+
+        VStack(spacing: 2) {
+            Text(content.name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Label(content.status.label, systemImage: content.status.symbolName)
+                .font(.caption2)
+                .foregroundStyle(content.status.tone.overlayColor)
         }
-        .disabled(!store.acceptsInput)
-        .accessibilityLabel(title)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.6), in: .capsule)
+        .glassEffect(.regular, in: .capsule)
+        .opacity(isHeaderVisible ? 1 : 0)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("remote-session-status")
+        .accessibilityHidden(!isHeaderVisible)
     }
 
-    private func acceptsInputChanged(
-        _ oldValue: Bool,
-        _ newValue: Bool
-    ) {
-        guard oldValue, !newValue else {
-            return
+    private func acceptsInputChanged(_ oldValue: Bool, _ newValue: Bool) {
+        if oldValue, !newValue {
+            isKeyboardPresented = false
         }
-        isKeyboardPresented = false
     }
 
     private func deviceSelected(_ deviceID: DeviceID) {
@@ -264,10 +165,6 @@ struct RemoteSessionView: View {
         store.send(.buttonTapped(button))
     }
 
-    private func homeButtonTapped() {
-        hardwareButtonTapped(.home)
-    }
-
     private func keyboardButtonTapped() {
         isKeyboardPresented.toggle()
     }
@@ -276,15 +173,8 @@ struct RemoteSessionView: View {
         store.send(.keyChanged(command))
     }
 
-    private func keyTapped(
-        _ key: DeviceKey,
-        _ modifiers: KeyModifiers
-    ) {
+    private func keyTapped(_ key: DeviceKey, _ modifiers: KeyModifiers) {
         store.send(.keyTapped(key, modifiers: modifiers))
-    }
-
-    private func lockButtonTapped() {
-        hardwareButtonTapped(.lock)
     }
 
     private func reconnectButtonTapped() {
@@ -304,14 +194,10 @@ struct RemoteSessionView: View {
         store.send(.rotateRightButtonTapped)
     }
 
-    private func selectedDeviceIDChanged(
-        _ oldValue: DeviceID?,
-        _ newValue: DeviceID?
-    ) {
-        guard oldValue != newValue else {
-            return
+    private func selectedDeviceIDChanged(_ oldValue: DeviceID?, _ newValue: DeviceID?) {
+        if oldValue != newValue {
+            isKeyboardPresented = false
         }
-        isKeyboardPresented = false
     }
 
     private func startViewingButtonTapped() {
@@ -323,167 +209,55 @@ struct RemoteSessionView: View {
         store.send(.stopViewingButtonTapped)
     }
 
-    private func tap(
-        _ point: Point2D,
-        _ viewport: Viewport
-    ) {
+    private func tap(_ point: Point2D, _ viewport: Viewport) {
         store.send(.tap(point: point, viewport: viewport))
     }
 
-    private func touch(
-        _ contactID: UInt8,
-        _ phase: TouchPhase,
-        _ point: Point2D,
-        _ viewport: Viewport
-    ) {
-        store.send(
-            .touch(
-                contactID: contactID,
-                phase: phase,
-                point: point,
-                viewport: viewport
-            )
-        )
+    private func touch(_ contactID: UInt8, _ phase: TouchPhase, _ point: Point2D, _ viewport: Viewport) {
+        store.send(.touch(contactID: contactID, phase: phase, point: point, viewport: viewport))
     }
 }
 
-/// Width bounds for the compact device picker shown over the remote canvas.
-enum DeviceTitleMenuMetrics {
-    static let compactMaximumWidth: CGFloat = 180
+extension RemoteSessionToolbarPresentation {
+    /// Hide healthy connection identity after three seconds. Trouble stays visible.
+    var headerDismissalDelay: Duration? {
+        switch self {
+        case .session(_, .live): .seconds(3)
+        case .noSelection, .pairingRequired, .viewingStopped, .session: nil
+        }
+    }
 }
 
-private struct DeviceTitleMenu: View {
-    let devices: [DeviceSummary]
-    let presentation: RemoteSessionToolbarPresentation
-    let usesCompactLabel: Bool
-    let usesHighContrastForeground: Bool
-    let deviceSelected: (DeviceID) -> Void
-    let pairButtonTapped: () -> Void
-
-    private var content: DeviceTitleContent {
-        DeviceTitleContent(presentation: presentation)
+private extension RemoteStatusTone {
+    var overlayColor: Color {
+        switch self {
+        case .neutral: .white.opacity(0.85)
+        case .positive: Color(red: 0.24, green: 0.95, blue: 0.48)
+        case .warning: Color(red: 1, green: 0.66, blue: 0.22)
+        }
     }
+}
 
-    var body: some View {
-        Menu {
-            if !devices.isEmpty {
-                ForEach(devices) { device in
-                    Button {
-                        deviceSelected(device.id)
-                    } label: {
-                        Label(
-                            device.name,
-                            systemImage: device.id
-                                == content.selectedDeviceID
-                                ? "checkmark"
-                                : device.deviceHubAvailabilitySymbol
-                        )
-                    }
-                }
-                Divider()
-            }
-
-            Button(
-                "Pair Nearby Device",
-                systemImage: "plus",
-                action: pairButtonTapped
-            )
-        } label: {
-            VStack(spacing: 1) {
-                HStack(spacing: 4) {
-                    Text("\(content.name)  ▾")
-                        .font(
-                            usesCompactLabel
-                                ? .caption.weight(.semibold)
-                                : .headline
-                        )
-                        .foregroundStyle(
-                            usesHighContrastForeground
-                                ? Color.white
-                                : Color.indigo
-                        )
-                        .lineLimit(1)
-                        .minimumScaleFactor(
-                            usesCompactLabel ? 0.75 : 1
-                        )
-                }
-
-                if content.selectedDeviceID == nil {
-                    Text(content.status.label)
-                        .font(.caption2)
-                        .foregroundStyle(headerStatusColor)
-                        .lineLimit(1)
-                } else {
-                    Label(
-                        content.status.label,
-                        systemImage: content.status.symbolName
-                    )
-                    .font(.caption2)
-                    .foregroundStyle(headerStatusColor)
-                    .lineLimit(1)
-                }
-            }
-            .frame(minHeight: 44)
-            .frame(
-                maxWidth: usesCompactLabel
-                    ? DeviceTitleMenuMetrics.compactMaximumWidth
-                    : nil
-            )
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .frame(minHeight: 44)
-        .accessibilityLabel(
-            "\(content.name), \(content.status.label)"
-        )
-        .accessibilityHint("Shows known devices and pairing options.")
-    }
-
-    private var headerStatusColor: Color {
-        if usesHighContrastForeground {
-            return switch content.status.tone {
-            case .neutral:
-                .white.opacity(0.82)
-            case .positive:
-                Color(
-                    red: 0.24,
-                    green: 0.95,
-                    blue: 0.48
-                )
-            case .warning:
-                Color(
-                    red: 1,
-                    green: 0.66,
-                    blue: 0.22
-                )
-            }
-        }
-
-        return switch content.status.tone {
-        case .neutral:
-            .white.opacity(0.62)
-        case .positive:
-            .green
-        case .warning:
-            .orange
-        }
+private extension View {
+    @ViewBuilder
+    func deviceHubHiddenNavigationBar() -> some View {
+        #if os(iOS)
+            toolbar(.hidden, for: .navigationBar)
+        #else
+            self
+        #endif
     }
 }
 
 enum RemoteCanvasColor {
-    static let value = Color(
-        red: 0.025,
-        green: 0.027,
-        blue: 0.035
-    )
+    static let value = Color(red: 0.025, green: 0.027, blue: 0.035)
 }
 
 @MainActor
 enum DeviceHubHaptics {
     static func hardwareControl() {
         #if os(iOS)
-            UIImpactFeedbackGenerator(style: .soft)
-                .impactOccurred(intensity: 0.55)
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.55)
         #endif
     }
 }

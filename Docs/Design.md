@@ -9,19 +9,20 @@ actions.
 
 The app hard-targets iOS/iPadOS 27 and uses current SwiftUI directly:
 
-- a two-column `NavigationSplitView` with a 280–320 point sidebar in regular
-  width;
-- one `NavigationStack` remote-session root on iPhone and narrow iPad windows;
-- a safe-area session header whose device picker remains a genuine 44-point
-  target without covering remote pixels;
+- one `NavigationStack` remote-session root on iPhone and iPad;
+- an aspect-fit device image that uses the full window, with no header or
+  toolbar space around it;
+- a centered device name and status overlay that fades three seconds after a
+  live connection, and stays visible when the connection needs attention;
 - `GlassEffectContainer` for the compact, related remote-control surface rather
   than separate ornamental capsules;
 - transformed `onGeometryChange` values only when layout geometry must enter
   feature state;
-- safe-area toolbars and insets that never cover tappable remote pixels.
+- floating hardware controls and a 44-point More menu near the top-right
+  corner, which contains device selection, pairing, details, and session options.
 
-Liquid Glass is reserved for interactive chrome. It is not layered over the
-remote display, lists, error copy, or large background regions.
+Liquid Glass gives the small controls contrast over the device image. The
+rest of the canvas remains clear.
 
 ## Color
 

@@ -5,14 +5,14 @@ import Testing
 
 @Suite("Remote touch ledger")
 struct RemoteTouchLedgerTests {
-    @Test("compact phone chrome never covers portrait remote pixels")
+    @Test("portrait controls float over an edge-to-edge canvas")
     func compactPhoneChromeUsesOrientationSpecificLayouts() {
         let portrait = RemoteSessionChromeLayout(
             containerSize: CGSize(width: 440, height: 956),
             horizontalSizeClass: .compact
         )
-        #expect(portrait == .portraitBottomDock)
-        #expect(portrait.topChromePadding >= 8)
+        #expect(portrait == .floatingBottomDock)
+        #expect(portrait.screenInset == 0)
         #expect(
             RemoteSessionChromeLayout(
                 containerSize: CGSize(width: 956, height: 440),
@@ -21,15 +21,16 @@ struct RemoteTouchLedgerTests {
         )
     }
 
-    @Test("regular iPad layouts use the native toolbar")
+    @Test("regular iPad windows keep the entire canvas beneath floating controls")
     func regularWidthChromeUsesNativeToolbar() {
         #expect(
             RemoteSessionChromeLayout(
                 containerSize: CGSize(width: 1180, height: 820),
                 horizontalSizeClass: .regular,
                 verticalSizeClass: .regular
-            ) == .nativeToolbar
+            ) == .floatingBottomDock
         )
+        #expect(RemoteSessionChromeLayout.floatingBottomDock.screenInset == 0)
     }
 
     @Test("landscape iPhone chrome follows compact height")
@@ -46,20 +47,6 @@ struct RemoteTouchLedgerTests {
     @Test("phone control rail keeps native minimum hit targets")
     func phoneControlRailUsesNativeHitTargets() {
         #expect(RemoteControlBarMetrics.minimumTargetDimension >= 44)
-    }
-
-    @Test("compact device title preserves the complete connection status")
-    func compactDeviceTitleReservesConnectionStatusWidth() {
-        #expect(DeviceTitleMenuMetrics.compactMaximumWidth >= 160)
-        #expect(DeviceTitleMenuMetrics.compactMaximumWidth <= 200)
-    }
-
-    @Test("sidebar rows remain compact, legible, and comfortably tappable")
-    func sidebarRowsUsePurposeBuiltCardMetrics() {
-        #expect(DeviceSidebarMetrics.rowMinimumHeight >= 56)
-        #expect(DeviceSidebarMetrics.rowMinimumHeight <= 80)
-        #expect(DeviceSidebarMetrics.cornerRadius >= 12)
-        #expect(DeviceSidebarMetrics.horizontalPadding >= 12)
     }
 
     @Test("rendered screen has explicit aspect-fit bounds")

@@ -54,6 +54,8 @@
         case pairingIPhoneDark
         case connectingIPhoneLight
         case liveIPhoneDark
+        case liveIPadLight
+        case liveIPadDark
         case liveLandscapeIPadTargetIPhoneDark
         case offlineIPhoneDark
         case lockedIPhoneAccessibility
@@ -214,7 +216,7 @@
                     presentation: .connecting
                 )
 
-            case .liveIPhoneDark:
+            case .liveIPhoneDark, .liveIPadLight, .liveIPadDark:
                 return try sessionState(
                     roster: roster,
                     device: reachableDevice,
