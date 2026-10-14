@@ -12,7 +12,6 @@ struct RemoteTouchLedgerTests {
             horizontalSizeClass: .compact
         )
         #expect(portrait == .floatingBottomDock)
-        #expect(portrait.screenInset == 0)
         #expect(
             RemoteSessionChromeLayout(
                 containerSize: CGSize(width: 956, height: 440),
@@ -30,7 +29,6 @@ struct RemoteTouchLedgerTests {
                 verticalSizeClass: .regular
             ) == .floatingBottomDock
         )
-        #expect(RemoteSessionChromeLayout.floatingBottomDock.screenInset == 0)
     }
 
     @Test("landscape iPhone chrome follows compact height")

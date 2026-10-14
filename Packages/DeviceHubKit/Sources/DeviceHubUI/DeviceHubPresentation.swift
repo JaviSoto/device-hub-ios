@@ -2,26 +2,6 @@ import DeviceHubCore
 import DeviceHubFeature
 import SwiftUI
 
-/// Stable grouping for the native device picker.
-///
-/// "Available" means both paired and reachable. Every other known target stays
-/// visible under "Needs Attention" with a textual reason.
-struct DeviceListSections: Equatable {
-    let available: [DeviceSummary]
-    let needsAttention: [DeviceSummary]
-
-    init(devices: [DeviceSummary]) {
-        available = devices.filter {
-            $0.pairingState == .paired
-                && $0.reachability == .reachable
-        }
-        needsAttention = devices.filter {
-            $0.pairingState != .paired
-                || $0.reachability != .reachable
-        }
-    }
-}
-
 enum RemoteStatusTone: Equatable {
     case neutral
     case positive

@@ -18,8 +18,4 @@ enum RemoteSessionChromeLayout: Equatable {
             ? .floatingTrailingRail
             : .floatingBottomDock
     }
-
-    var screenInset: CGFloat {
-        0
-    }
 }

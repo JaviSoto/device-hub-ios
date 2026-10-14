@@ -207,42 +207,6 @@ struct DeviceHubUIPresentationTests {
         #expect(!content.message.isEmpty)
     }
 
-    @Test("Device picker separates available devices from anything requiring attention")
-    func devicePickerSections() {
-        let roster = DeviceRoster(
-            devices: [
-                device(
-                    id: "offline",
-                    name: "Travel iPhone",
-                    pairing: .paired,
-                    reachability: .unavailable
-                ),
-                device(
-                    id: "available",
-                    name: "Test iPhone",
-                    pairing: .paired,
-                    reachability: .reachable
-                ),
-                device(
-                    id: "pair",
-                    name: "Lab iPhone",
-                    pairing: .requiresPairing,
-                    reachability: .reachable
-                )
-            ]
-        )
-        let sections = DeviceListSections(devices: roster.devices)
-
-        expectNoDifference(
-            sections.available.map(\.id.rawValue),
-            ["available"]
-        )
-        expectNoDifference(
-            sections.needsAttention.map(\.id.rawValue),
-            ["offline", "pair"]
-        )
-    }
-
     @Test(
         "Session status distinguishes control readiness",
         arguments: [

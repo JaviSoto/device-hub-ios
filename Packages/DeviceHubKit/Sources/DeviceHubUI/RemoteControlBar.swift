@@ -110,7 +110,7 @@ struct RemoteSessionMenu: View {
     let selectedDeviceID: DeviceID?
     let aboutButtonTapped: () -> Void
     let buttonTapped: (DeviceButton) -> Void
-    let deviceSelected: (DeviceID) -> Void
+    let deviceSelected: (_ deviceID: DeviceID) -> Void
     let detailsButtonTapped: () -> Void
     let pairButtonTapped: () -> Void
     let reconnectButtonTapped: () -> Void
