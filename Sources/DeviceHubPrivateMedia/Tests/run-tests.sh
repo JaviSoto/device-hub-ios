@@ -13,11 +13,9 @@ devicehub_require_guard private-media-tests 900 "$0" "$@"
 ROOT="$repository_root"
 # shellcheck source=BuildSupport/simulator_guard.sh
 source "$repository_root/BuildSupport/simulator_guard.sh"
-devicehub_require_simulator device-hub-private-media-tests
 
 temp_root=${TMPDIR:-/tmp}
 work_dir=$(mktemp -d "$temp_root/devicehub-private-media.XXXXXX")
-simulator_udid=${DEVICE_HUB_SIMULATOR_UDID:?simulator setup did not provide a UDID}
 
 cleanup() {
   local status=$?
@@ -89,16 +87,6 @@ xcrun --sdk iphoneos clang++ \
   "$module_dir/Probe/main.mm" \
   -o "$work_dir/DeviceHubPrivateMediaDeviceProbe"
 
-simulator_runtime_version=$(
-  xcrun simctl getenv "$simulator_udid" SIMULATOR_RUNTIME_VERSION
-)
-if [[ ${simulator_runtime_version%%.*} != 27 ]]; then
-  printf 'Expected an iOS 27 simulator, found %s (%s).\n' \
-    "$simulator_runtime_version" "$simulator_udid" >&2
-  exit 1
-fi
-
-printf 'Running the fail-closed iOS 27 Simulator runtime probe...\n'
 simulator_sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
 simulator_arch=$(uname -m)
 case "$simulator_arch" in
@@ -121,6 +109,19 @@ xcrun --sdk iphonesimulator clang++ \
   "$module_dir/Probe/main.mm" \
   -o "$probe_app/DeviceHubPrivateMediaProbe"
 codesign --force --sign - "$probe_app" >/dev/null
+
+# Compile every device-independent probe before allocating a simulator.
+devicehub_require_simulator device-hub-private-media-tests
+simulator_udid=${DEVICE_HUB_SIMULATOR_UDID:?simulator setup did not provide a UDID}
+simulator_runtime_version=$(
+  xcrun simctl getenv "$simulator_udid" SIMULATOR_RUNTIME_VERSION
+)
+if [[ ${simulator_runtime_version%%.*} != 27 ]]; then
+  printf 'Expected an iOS 27 simulator, found %s (%s).\n' \
+    "$simulator_runtime_version" "$simulator_udid" >&2
+  exit 1
+fi
+printf 'Running the fail-closed iOS 27 Simulator runtime probe...\n'
 
 probe_home="$work_dir/probe-home"
 mkdir -p "$probe_home/Documents"
