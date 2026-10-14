@@ -7,6 +7,9 @@ PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 source "$PROCESS_GUARD"
 devicehub_require_guard lint-dead-code 1800 "$0" "$@"
 
+# shellcheck source=BuildSupport/xcodebuild_test_output.sh
+source "$ROOT/BuildSupport/xcodebuild_test_output.sh"
+
 DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
 if [[ ! -d "$DEVELOPER_DIR" ]]; then
@@ -28,6 +31,25 @@ if [[ ! -d DeviceHub.xcodeproj ]]; then
   exit 1
 fi
 
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+APP_EVIDENCE_ROOT="$DERIVED_DATA_PATH/TestEvidence/Periphery"
+# Periphery always supplies its own -derivedDataPath when it builds. Build the
+# index explicitly so both the compiler cache and evidence keep their owner.
+devicehub_run_xcodebuild_test \
+  devicehub-app-index \
+  "$APP_EVIDENCE_ROOT/devicehub-app-index-$RUN_ID.log" \
+  "$APP_EVIDENCE_ROOT/devicehub-app-index-$RUN_ID.xcresult" \
+  "${XCBEAUTIFY_COMMAND:-xcbeautify}" \
+  /usr/bin/xcodebuild build-for-testing \
+  -project "$ROOT/DeviceHub.xcodeproj" \
+  -scheme DeviceHub \
+  -destination generic/platform=iOS \
+  -derivedDataPath "$DERIVED_DATA_PATH" \
+  -skipMacroValidation \
+  CODE_SIGNING_ALLOWED=NO \
+  COMPILER_INDEX_STORE_ENABLE=YES \
+  INDEX_ENABLE_DATA_STORE=YES
+
 periphery scan \
   --project "$ROOT/DeviceHub.xcodeproj" \
   --schemes DeviceHub \
@@ -38,15 +60,11 @@ periphery scan \
   --relative-results \
   --strict \
   --format xcode \
-  -- \
-  -destination generic/platform=iOS \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
-  -skipMacroValidation \
-  CODE_SIGNING_ALLOWED=NO
+  --skip-build \
+  --index-store-path "$DERIVED_DATA_PATH/Index.noindex/DataStore"
 
 PACKAGE_ROOT="$ROOT/Packages/DeviceHubKit"
 PACKAGE_DERIVED_DATA="$DERIVED_DATA_PATH/Periphery/DeviceHubKit"
-RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 PACKAGE_BUILD_LOG="$DERIVED_DATA_PATH/TestEvidence/Periphery/devicehub-kit-build-for-testing-$RUN_ID.log"
 mkdir -p "$PACKAGE_DERIVED_DATA" "$(dirname "$PACKAGE_BUILD_LOG")"
 

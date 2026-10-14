@@ -419,6 +419,15 @@ class SimulatorSetupTests(unittest.TestCase):
         self.assertNotIn("rm -rf", contents)
         self.assertNotIn("codex-simulator-lease", contents)
 
+    def test_periphery_reads_the_app_index_without_a_duplicate_build_path(self) -> None:
+        contents = (ROOT / "Scripts" / "lint-dead-code.sh").read_text()
+        app_scan = contents.split("periphery scan", 1)[1].split("PACKAGE_ROOT=", 1)[0]
+
+        self.assertIn('--skip-build', app_scan)
+        self.assertIn('--index-store-path "$DERIVED_DATA_PATH/Index.noindex/DataStore"', app_scan)
+        self.assertNotIn('-derivedDataPath', app_scan)
+        self.assertLess(contents.index('devicehub_run_xcodebuild_test'), contents.index('periphery scan'))
+
     def test_simulator_guard_has_no_retired_shared_supervisor_path(self) -> None:
         contents = (ROOT / "BuildSupport" / "simulator_guard.sh").read_text()
 
