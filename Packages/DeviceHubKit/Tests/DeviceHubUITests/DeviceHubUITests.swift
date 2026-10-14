@@ -115,7 +115,6 @@ struct DeviceHubUIPresentationTests {
             DeviceTitleContent(presentation: .noSelection),
             DeviceTitleContent(
                 name: "Device Hub",
-                selectedDeviceID: nil,
                 status: RemoteStatusContent(
                     label: "No device selected",
                     symbolName: "iphone.slash",
@@ -129,7 +128,6 @@ struct DeviceHubUIPresentationTests {
             ),
             DeviceTitleContent(
                 name: "Lab iPhone",
-                selectedDeviceID: needsPairing.id,
                 status: RemoteStatusContent(
                     label: "Pairing required",
                     symbolName: "link.badge.plus",
@@ -143,7 +141,6 @@ struct DeviceHubUIPresentationTests {
             ),
             DeviceTitleContent(
                 name: "Test iPhone",
-                selectedDeviceID: paired.id,
                 status: RemoteStatusContent(
                     label: "Viewing stopped",
                     symbolName: "pause.circle",
@@ -160,7 +157,6 @@ struct DeviceHubUIPresentationTests {
             ),
             DeviceTitleContent(
                 name: "Test iPhone",
-                selectedDeviceID: paired.id,
                 status: RemoteStatusContent(
                     label: "Live",
                     symbolName: "circle.fill",

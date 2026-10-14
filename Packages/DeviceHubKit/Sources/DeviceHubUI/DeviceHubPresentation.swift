@@ -11,25 +11,15 @@ enum RemoteStatusTone: Equatable {
 /// User-visible title and status derived from one explicit feature projection.
 struct DeviceTitleContent: Equatable {
     let name: String
-    let selectedDeviceID: DeviceID?
     let status: RemoteStatusContent
+}
 
-    init(
-        name: String,
-        selectedDeviceID: DeviceID?,
-        status: RemoteStatusContent
-    ) {
-        self.name = name
-        self.selectedDeviceID = selectedDeviceID
-        self.status = status
-    }
-
+extension DeviceTitleContent {
     init(presentation: RemoteSessionToolbarPresentation) {
         switch presentation {
         case .noSelection:
             self.init(
                 name: "Device Hub",
-                selectedDeviceID: nil,
                 status: RemoteStatusContent(
                     label: "No device selected",
                     symbolName: "iphone.slash",
@@ -40,7 +30,6 @@ struct DeviceTitleContent: Equatable {
         case let .pairingRequired(device):
             self.init(
                 name: device.name,
-                selectedDeviceID: device.id,
                 status: RemoteStatusContent(
                     label: "Pairing required",
                     symbolName: "link.badge.plus",
@@ -51,7 +40,6 @@ struct DeviceTitleContent: Equatable {
         case let .session(device, presentation):
             self.init(
                 name: device.name,
-                selectedDeviceID: device.id,
                 status: RemoteStatusContent(
                     presentation: presentation
                 )
@@ -60,7 +48,6 @@ struct DeviceTitleContent: Equatable {
         case let .viewingStopped(device):
             self.init(
                 name: device.name,
-                selectedDeviceID: device.id,
                 status: RemoteStatusContent(
                     label: "Viewing stopped",
                     symbolName: "pause.circle",
