@@ -8,9 +8,9 @@ exec 1>&2
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED_IOS_SUPPORT_DIR="${SHARED_IOS_SUPPORT_DIR:-/Users/javi/code/ios-build-support}"
-DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-27.0.0-beta.3.app/Contents/Developer}"
+DEVELOPER_DIR="${DEVELOPER_DIR:-}"
 KEYCHAIN_PATH="${KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}"
-APPLE_API_KEY_JSON="${APPLE_API_KEY_JSON:-$HOME/.codex/secrets/apple_api_key.json}"
+APPLE_API_KEY_JSON="${APPLE_API_KEY_JSON:-}"
 TEAM_ID="${TEAM_ID:-6V6XY979JQ}"
 APP_BUNDLE_ID="${APP_BUNDLE_ID:-es.javisoto.DeviceHub}"
 CERTIFICATE="${CERTIFICATE:-Apple Distribution: Javier Soto Bustos (6V6XY979JQ)}"
@@ -21,11 +21,18 @@ LATEST_ROOT="${DEVICE_HUB_LATEST_ROOT:-$ROOT/build/device/latest}"
 ARCHIVE_PATH="$BUILD_ROOT/DeviceHub.xcarchive"
 EXPORT_PATH="$BUILD_ROOT/export"
 EXPORT_OPTIONS="$BUILD_ROOT/ExportOptions.generated.plist"
-DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$ROOT/DerivedDataRelease}"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData}"
+DERIVED_DATA_EXTERNAL_ROOT="/Volumes/RunnerCache/DerivedData/javi"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Device Hub releases must run on macOS." >&2
   exit 1
+fi
+if [[ -z "$DEVELOPER_DIR" ]]; then
+  if ! DEVELOPER_DIR="$(/usr/bin/xcode-select -p)"; then
+    echo "Unable to resolve the currently selected Xcode developer directory." >&2
+    exit 1
+  fi
 fi
 if [[ ! -d "$SHARED_IOS_SUPPORT_DIR" ]]; then
   echo "Missing shared iOS build support: $SHARED_IOS_SUPPORT_DIR" >&2
@@ -35,10 +42,49 @@ if [[ ! -d "$DEVELOPER_DIR" ]]; then
   echo "Xcode developer directory does not exist: $DEVELOPER_DIR" >&2
   exit 1
 fi
-if [[ ! -f "$APPLE_API_KEY_JSON" ]]; then
+if [[ -n "$APPLE_API_KEY_JSON" && ! -f "$APPLE_API_KEY_JSON" ]]; then
   echo "App Store Connect API key JSON is missing: $APPLE_API_KEY_JSON" >&2
   exit 1
 fi
+if [[ ! -d /Volumes/RunnerCache ]]; then
+  echo "RunnerCache must be mounted before a Device Hub release." >&2
+  exit 1
+fi
+RUNNERCACHE_MOUNT="$(df -P /Volumes/RunnerCache | awk 'NR == 2 {print $NF}')"
+if [[ "$RUNNERCACHE_MOUNT" != "/Volumes/RunnerCache" ]]; then
+  echo "RunnerCache is not mounted at /Volumes/RunnerCache." >&2
+  exit 1
+fi
+case "$DERIVED_DATA_PATH" in
+  "$HOME/Library/Developer/Xcode/DerivedData"|\
+  "$HOME/Library/Developer/Xcode/DerivedData/"*|\
+  "$DERIVED_DATA_EXTERNAL_ROOT"|\
+  "$DERIVED_DATA_EXTERNAL_ROOT/"*) ;;
+  *)
+    echo "DerivedData must use the native Xcode path or RunnerCache: $DERIVED_DATA_PATH" >&2
+    exit 1
+    ;;
+esac
+if [[ ! -d "$DERIVED_DATA_PATH" ]]; then
+  mkdir -p "$DERIVED_DATA_PATH"
+fi
+DERIVED_DATA_REALPATH="$(cd "$DERIVED_DATA_PATH" && pwd -P)"
+case "$DERIVED_DATA_REALPATH" in
+  "$DERIVED_DATA_EXTERNAL_ROOT"|"$DERIVED_DATA_EXTERNAL_ROOT/"*) ;;
+  *)
+    echo "DerivedData must resolve to RunnerCache: $DERIVED_DATA_REALPATH" >&2
+    exit 1
+    ;;
+esac
+DERIVED_DATA_MOUNT="$(df -P "$DERIVED_DATA_REALPATH" | awk 'NR == 2 {print $NF}')"
+if [[ "$DERIVED_DATA_MOUNT" != "/Volumes/RunnerCache" ]]; then
+  echo "DerivedData is not on RunnerCache: $DERIVED_DATA_REALPATH" >&2
+  exit 1
+fi
+EVIDENCE_ROOT="$DERIVED_DATA_REALPATH/DeviceHubRelease/$STAMP"
+ARCHIVE_LOG="$EVIDENCE_ROOT/archive.log"
+ARCHIVE_RESULT_BUNDLE="$EVIDENCE_ROOT/archive.xcresult"
+EXPORT_LOG="$EVIDENCE_ROOT/export.log"
 
 # shellcheck source=/dev/null
 source "$SHARED_IOS_SUPPORT_DIR/scripts/release_build_settings.sh"
@@ -46,6 +92,61 @@ source "$SHARED_IOS_SUPPORT_DIR/scripts/release_build_settings.sh"
 source "$SHARED_IOS_SUPPORT_DIR/scripts/adhoc_signing.sh"
 export DEVELOPER_DIR
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+ios_require_command xcbeautify
+XCBEAUTIFY_BIN="$(ios_resolve_command xcbeautify)"
+
+run_xcodebuild() {
+  local action="${1:?action required}"
+  local raw_log="${2:?raw log path required}"
+  local result_bundle="${3:-}"
+  shift 3
+
+  local -a statuses
+  if "$@" 2>&1 | tee "$raw_log" | "$XCBEAUTIFY_BIN" --is-ci --disable-logging; then
+    statuses=("${PIPESTATUS[@]}")
+  else
+    statuses=("${PIPESTATUS[@]}")
+  fi
+
+  if (( statuses[0] != 0 )); then
+    printf 'XCODEBUILD_FAILED action=%s xcodebuild_exit=%s tee_exit=%s formatter_exit=%s raw_log=%s' \
+      "$action" "${statuses[0]}" "${statuses[1]}" "${statuses[2]}" "$raw_log" >&2
+    if [[ -n "$result_bundle" ]]; then
+      printf ' result_bundle=%s' "$result_bundle" >&2
+    fi
+    printf '\n' >&2
+    return "${statuses[0]}"
+  fi
+  if (( statuses[1] != 0 )); then
+    printf 'XCODEBUILD_OUTPUT_FAILED action=%s tee_exit=%s raw_log=%s' \
+      "$action" "${statuses[1]}" "$raw_log" >&2
+    if [[ -n "$result_bundle" ]]; then
+      printf ' result_bundle=%s' "$result_bundle" >&2
+    fi
+    printf '\n' >&2
+    return "${statuses[1]}"
+  fi
+  if (( statuses[2] != 0 )); then
+    printf 'XCODEBUILD_FORMAT_FAILED action=%s formatter_exit=%s raw_log=%s' \
+      "$action" "${statuses[2]}" "$raw_log" >&2
+    if [[ -n "$result_bundle" ]]; then
+      printf ' result_bundle=%s' "$result_bundle" >&2
+    fi
+    printf '\n' >&2
+    return "${statuses[2]}"
+  fi
+  if [[ -n "$result_bundle" && ! -d "$result_bundle" ]]; then
+    printf 'XCODEBUILD_RESULT_MISSING action=%s result_bundle=%s raw_log=%s\n' \
+      "$action" "$result_bundle" "$raw_log" >&2
+    return 1
+  fi
+
+  printf 'XCODEBUILD_OK action=%s raw_log=%s' "$action" "$raw_log" >&2
+  if [[ -n "$result_bundle" ]]; then
+    printf ' result_bundle=%s' "$result_bundle" >&2
+  fi
+  printf '\n' >&2
+}
 
 cd "$ROOT"
 if [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
@@ -58,14 +159,15 @@ ios_require_command xcodegen
 ios_validate_signing_keychain "$KEYCHAIN_PATH"
 SOURCE_REVISION="$(git rev-parse --verify HEAD)"
 DEFAULT_BUILD_NUMBER="$("$SHARED_IOS_SUPPORT_DIR/scripts/ios_build_number.sh")"
-ios_prepare_build_version_overrides "1.0.0" "$DEFAULT_BUILD_NUMBER"
+PROJECT_MARKETING_VERSION="$(yq '.settings.base.MARKETING_VERSION' "$ROOT/project.yml")"
+ios_prepare_build_version_overrides "$PROJECT_MARKETING_VERSION" "$DEFAULT_BUILD_NUMBER"
 
 # Build the protocol artifact before generating the project. This is the same
 # source-controlled protocol boundary used by the normal app build.
 "$ROOT/Scripts/build-protocol-xcframework.sh"
 xcodegen generate --spec "$ROOT/project.yml"
 
-mkdir -p "$BUILD_ROOT" "$EXPORT_PATH" "$LATEST_ROOT"
+mkdir -p "$BUILD_ROOT" "$EXPORT_PATH" "$LATEST_ROOT" "$EVIDENCE_ROOT"
 if [[ -z "$TARGET_DEVICE_UDIDS" ]]; then
   TARGET_DEVICE_UDIDS="$(ios_fetch_enabled_ios_device_udids "$APPLE_API_KEY_JSON")"
 fi
@@ -85,12 +187,14 @@ ios_write_adhoc_export_options_plist \
   "$CERTIFICATE" \
   "$APP_BUNDLE_ID=$PROFILE_UUID"
 
-/usr/bin/xcodebuild -quiet archive \
+run_xcodebuild archive "$ARCHIVE_LOG" "$ARCHIVE_RESULT_BUNDLE" \
+  /usr/bin/xcodebuild archive \
   -project "$ROOT/DeviceHub.xcodeproj" \
   -scheme DeviceHub \
   -configuration Release \
   -destination generic/platform=iOS \
   -archivePath "$ARCHIVE_PATH" \
+  -resultBundlePath "$ARCHIVE_RESULT_BUNDLE" \
   -derivedDataPath "$DERIVED_DATA_PATH" \
   -skipMacroValidation \
   CODE_SIGNING_ALLOWED=YES \
@@ -105,7 +209,8 @@ ios_write_adhoc_export_options_plist \
   DEVICE_HUB_SOURCE_REVISION="$SOURCE_REVISION" \
   "${BUILD_SETTING_OVERRIDES[@]}"
 
-/usr/bin/xcodebuild -quiet -exportArchive \
+run_xcodebuild export "$EXPORT_LOG" "" \
+  /usr/bin/xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
   -exportPath "$EXPORT_PATH" \
   -exportOptionsPlist "$EXPORT_OPTIONS"

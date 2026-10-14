@@ -90,6 +90,15 @@ It does not install the app on a device or use a second catalog or publication
 route. Release notes are required and must contain only the user-visible
 changes since the previous Device Hub build.
 
+By default, signing reads the existing App Store Connect fields (`issuer_id`,
+`key_id`, and `key`) through `codex-secret`'s private file descriptor, and the
+publisher reads the existing Builds upload `token` the same way. Neither needs
+a local token file. Explicit mode-0600 file overrides are available through
+`APPLE_API_KEY_JSON` and `BUILDS_LAN_UPLOAD_TOKEN_FILE`. Builds use the
+currently selected Xcode and the native DerivedData path, which must resolve to
+`/Volumes/RunnerCache/DerivedData/javi`; archive logs and the `.xcresult` are
+saved outside the repository under `DeviceHubRelease/<timestamp>` there.
+
 ## Project structure
 
 ```text

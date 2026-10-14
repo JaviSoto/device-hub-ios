@@ -22,7 +22,8 @@ done
 
 API_BASE_URL="https://api.builds.lan"
 UPLOAD_CLIENT="${BUILDS_LAN_UPLOAD_CLIENT:-/Volumes/RunnerCache/code/builds-native/Scripts/upload-builds-lan-api.py}"
-UPLOAD_TOKEN_FILE="${BUILDS_LAN_UPLOAD_TOKEN_FILE:-$HOME/.codex/secrets/builds-lan-upload-token}"
+UPLOAD_TOKEN_FILE="${BUILDS_LAN_UPLOAD_TOKEN_FILE:-}"
+CODEX_SECRET_BIN="${CODEX_SECRET_BIN:-$HOME/.local/bin/codex-secret}"
 MANIFEST="${MANIFEST:-}"
 
 if [[ -z "$IPA" || ! -f "$IPA" ]]; then
@@ -41,8 +42,13 @@ if [[ ! -r "$UPLOAD_CLIENT" ]]; then
   echo "Canonical Builds.lan upload client is missing: $UPLOAD_CLIENT" >&2
   exit 1
 fi
-if [[ ! -f "$UPLOAD_TOKEN_FILE" || "$(stat -f '%Lp' "$UPLOAD_TOKEN_FILE")" != 600 ]]; then
-  echo "Builds.lan upload token must be a mode-0600 file: $UPLOAD_TOKEN_FILE" >&2
+if [[ -n "$UPLOAD_TOKEN_FILE" ]]; then
+  if [[ ! -f "$UPLOAD_TOKEN_FILE" || "$(stat -f '%Lp' "$UPLOAD_TOKEN_FILE")" != 600 ]]; then
+    echo "Builds.lan upload token must be a mode-0600 file: $UPLOAD_TOKEN_FILE" >&2
+    exit 1
+  fi
+elif [[ ! -x "$CODEX_SECRET_BIN" ]]; then
+  echo "The codex-secret runner is missing or not executable: $CODEX_SECRET_BIN" >&2
   exit 1
 fi
 
@@ -103,16 +109,27 @@ VERIFY_DIR="$(mktemp -d "${TMPDIR:-/private/tmp}/device-hub-publication.XXXXXX")
 cleanup() { rm -rf "$VERIFY_DIR"; }
 trap cleanup EXIT
 
-python3 "$UPLOAD_CLIENT" \
+UPLOAD_ARGUMENTS=(
   --api-url "$API_BASE_URL" \
   --platform ios \
   --artifact "$IPA" \
   --manifest "$MANIFEST" \
   --release-notes-file "$RELEASE_NOTES_FILE" \
-  --token-file "$UPLOAD_TOKEN_FILE" \
   --app-name "Device Hub" \
   --title "Device Hub for iPhone and iPad" \
-  --channel adhoc > "$VERIFY_DIR/api-response.json"
+  --channel adhoc
+)
+if [[ -n "$UPLOAD_TOKEN_FILE" ]]; then
+  python3 "$UPLOAD_CLIENT" \
+    "${UPLOAD_ARGUMENTS[@]}" \
+    --token-file "$UPLOAD_TOKEN_FILE" \
+    > "$VERIFY_DIR/api-response.json"
+else
+  CODEX_AGENT=1 "$CODEX_SECRET_BIN" run builds_lan_upload_access -- \
+    python3 "$UPLOAD_CLIENT" \
+    "${UPLOAD_ARGUMENTS[@]}" \
+    > "$VERIFY_DIR/api-response.json"
+fi
 
 python3 - "$VERIFY_DIR/api-response.json" <<'PY'
 from __future__ import annotations
@@ -121,12 +138,13 @@ import json
 import sys
 from pathlib import Path
 
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-publication = payload.get("publication")
-if payload.get("ok") is not True or not isinstance(publication, dict):
-    raise SystemExit("Builds.lan API response has no successful publication")
+publication = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(publication, dict):
+    raise SystemExit("Builds.lan uploader returned no publication object")
 if publication.get("platform") != "ios":
-    raise SystemExit("Builds.lan API returned a non-iOS publication")
+    raise SystemExit("Builds.lan uploader returned a non-iOS publication")
+if publication.get("bundle_id") != "es.javisoto.DeviceHub":
+    raise SystemExit("Builds.lan uploader returned a different app")
 build = publication.get("build")
 if not isinstance(build, dict) or not publication.get("icon_url"):
     raise SystemExit("Builds.lan publication is missing build or icon metadata")
