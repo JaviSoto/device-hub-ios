@@ -22,6 +22,7 @@ done
 
 API_BASE_URL="https://api.builds.lan"
 UPLOAD_CLIENT="${BUILDS_LAN_UPLOAD_CLIENT:-/Volumes/RunnerCache/code/builds-native/Scripts/upload-builds-lan-api.py}"
+BUILDS_LAN_CA_FILE="${BUILDS_LAN_CA_FILE:-$(dirname "$UPLOAD_CLIENT")/../Packages/BuildsKit/Sources/BuildsCore/Resources/builds-lan-root-ca.pem}"
 UPLOAD_TOKEN_FILE="${BUILDS_LAN_UPLOAD_TOKEN_FILE:-}"
 CODEX_SECRET_BIN="${CODEX_SECRET_BIN:-$HOME/.local/bin/codex-secret}"
 MANIFEST="${MANIFEST:-}"
@@ -40,6 +41,10 @@ if ! LC_ALL=C grep -q '[^[:space:]]' "$RELEASE_NOTES_FILE"; then
 fi
 if [[ ! -r "$UPLOAD_CLIENT" ]]; then
   echo "Canonical Builds.lan upload client is missing: $UPLOAD_CLIENT" >&2
+  exit 1
+fi
+if [[ ! -r "$BUILDS_LAN_CA_FILE" ]]; then
+  echo "Builds.lan CA certificate is missing or unreadable: $BUILDS_LAN_CA_FILE" >&2
   exit 1
 fi
 if [[ -n "$UPLOAD_TOKEN_FILE" ]]; then
@@ -110,6 +115,7 @@ cleanup() { rm -rf "$VERIFY_DIR"; }
 trap cleanup EXIT
 
 UPLOAD_ARGUMENTS=(
+  --ca-file "$BUILDS_LAN_CA_FILE" \
   --platform ios \
   --artifact "$IPA" \
   --manifest "$MANIFEST" \
@@ -157,7 +163,7 @@ PY
 
 # The API is the catalog source for both the website and native clients. Read
 # that exact endpoint after upload and prove the publication is visible there.
-curl --fail --silent --show-error --output "$VERIFY_DIR/catalog.json" \
+curl --fail --silent --show-error --cacert "$BUILDS_LAN_CA_FILE" --output "$VERIFY_DIR/catalog.json" \
   "$API_BASE_URL/v1/catalog"
 python3 - "$VERIFY_DIR/publication.json" "$VERIFY_DIR/catalog.json" <<'PY'
 from __future__ import annotations

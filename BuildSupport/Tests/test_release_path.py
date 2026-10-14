@@ -192,6 +192,8 @@ class ReleasePathTests(unittest.TestCase):
             (fixture / "source-revision.txt").write_text(f"{revision}\n")
             notes = fixture / "release-notes.md"
             notes.write_text("Full-screen remote device view and working keyboard.\n")
+            ca_file = fixture / "root-ca.pem"
+            ca_file.write_text("synthetic public CA fixture\n")
 
             secret_file = fixture / "secret.json"
             secret_file.write_text('{"token":"synthetic-builds-token"}')
@@ -219,6 +221,7 @@ class ReleasePathTests(unittest.TestCase):
                 "args = sys.argv[1:]\n"
                 "assert '--token-file' not in args\n"
                 "assert '--api-url' not in args\n"
+                "assert args[args.index('--ca-file') + 1] == os.environ['BUILDS_LAN_CA_FILE']\n"
                 "assert args[args.index('--platform') + 1] == 'ios'\n"
                 "artifact = Path(args[args.index('--artifact') + 1])\n"
                 "token = json.load(os.fdopen(int(os.environ['CODEX_SECRET_FD'])))['token']\n"
@@ -256,6 +259,7 @@ class ReleasePathTests(unittest.TestCase):
                     "PATH": f"{tools}:{env['PATH']}",
                     "BUILDS_LAN_UPLOAD_CLIENT": str(fake_uploader),
                     "CODEX_SECRET_BIN": str(fake_secret),
+                    "BUILDS_LAN_CA_FILE": str(ca_file),
                     "PUBLISH_FIXTURE_SECRET_FILE": str(secret_file),
                     "PUBLISH_FIXTURE_LOG": str(upload_log),
                     "PUBLISH_FIXTURE_SHA": str(upload_sha),

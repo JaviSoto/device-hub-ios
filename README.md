@@ -98,6 +98,12 @@ currently selected Xcode and the native DerivedData path, which must resolve to
 `/Volumes/RunnerCache/DerivedData/javi`; archive logs and the `.xcresult` are
 saved outside the repository under `DeviceHubRelease/<timestamp>` there.
 
+The publisher verifies HTTPS with the existing LAN CA bundled in BuildsKit.
+Set `BUILDS_LAN_CA_FILE` only to select another trusted local CA certificate.
+Python's default certificate store does not include Mini's macOS LAN trust.
+`PROFILE_UUID` can reuse an existing Device Hub profile after its bundle,
+team, certificate, expiry, and device coverage have been verified.
+
 ## Project structure
 
 ```text
