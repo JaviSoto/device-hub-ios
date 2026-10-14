@@ -178,7 +178,8 @@ PROFILE_UUID="$(ios_ensure_profile_uuid \
   'Device Hub AdHoc' \
   "$APPLE_API_KEY_JSON" \
   "$SHARED_IOS_SUPPORT_DIR/scripts/ensure_adhoc_profile.py" \
-  "$TEAM_ID")"
+  "$TEAM_ID" \
+  "$CERTIFICATE")"
 
 ios_write_adhoc_export_options_plist \
   "$EXPORT_OPTIONS" \

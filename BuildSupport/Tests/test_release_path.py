@@ -81,6 +81,27 @@ class ReleasePathTests(unittest.TestCase):
         self.assertIn('ios_fetch_enabled_ios_device_udids "$APPLE_API_KEY_JSON"', build)
         self.assertIn('"$APPLE_API_KEY_JSON"', build)
 
+    def test_profile_request_passes_the_local_signing_identity(self) -> None:
+        build = (ROOT / "Scripts/build-device-ipa.sh").read_text()
+        call = re.search(r'(?ms)^PROFILE_UUID="\$\(ios_ensure_profile_uuid \\\n.*?\)"', build)
+        self.assertIsNotNone(call)
+        shell = '\n'.join((
+            'set -euo pipefail',
+            'APP_BUNDLE_ID=es.javisoto.DeviceHub',
+            'TARGET_DEVICE_UDIDS=synthetic-device',
+            'APPLE_API_KEY_JSON=""',
+            'SHARED_IOS_SUPPORT_DIR=/synthetic-support',
+            'TEAM_ID=synthetic-team',
+            'CERTIFICATE="Synthetic Distribution Identity"',
+            'ios_ensure_profile_uuid() { [[ "${8:-}" == "$CERTIFICATE" ]] || return 64; printf "synthetic-profile\\n"; }',
+            call.group(),
+            'printf "%s\\n" "$PROFILE_UUID"',
+        ))
+        result = subprocess.run(['/bin/bash', '-c', shell], capture_output=True, text=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'synthetic-profile\n')
+
     def test_xcodebuild_keeps_raw_and_formatted_output_and_result_bundle(self) -> None:
         build = (ROOT / "Scripts/build-device-ipa.sh").read_text()
 
