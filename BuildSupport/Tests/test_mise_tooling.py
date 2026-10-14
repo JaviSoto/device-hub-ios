@@ -30,7 +30,7 @@ class MiseToolingContractTests(unittest.TestCase):
     def test_full_ci_verifies_the_packaged_protocol_once(self) -> None:
         script = (ROOT / "ci" / "run_ci.sh").read_text()
 
-        self.assertEqual(1, script.count("mise run protocol:verify"))
+        self.assertEqual(1, script.count("run_ci_task protocol:verify"))
 
     def test_lint_task_delegates_to_atomic_mise_tasks(self) -> None:
         configuration = tomllib.loads((ROOT / "mise.toml").read_text())

@@ -20,14 +20,28 @@ if [[ -z "${CI:-}" && "${DEVICE_HUB_FULL_CI:-0}" != "1" ]]; then
   fi
 fi
 
-mise run test
-mise run protocol:verify
-mise run lint
-mise run previews
+export DERIVED_DATA_PATH="$RELEASE_DERIVED_DATA_PATH"
+
+# mise closes inherited file descriptors before it starts a task. Keep the
+# outer full-CI guard, but make each nested guarded task acquire a separate
+# lock instead of trusting the descriptor that mise cannot preserve.
+NESTED_GUARD_LOCK_PATH="${TMPDIR:-/private/tmp}/device-hub-ios-full-ci-nested.$$.lock"
+trap 'rm -f "$NESTED_GUARD_LOCK_PATH"' EXIT
+run_ci_task() {
+  DEVICE_HUB_GUARD_HELD=0 \
+    DEVICE_HUB_GUARD_FD='' \
+    DEVICE_HUB_GUARD_LOCK_PATH="$NESTED_GUARD_LOCK_PATH" \
+    mise run "$@"
+}
+
+run_ci_task test
+run_ci_task protocol:verify
+run_ci_task lint
+run_ci_task previews
 
 CONFIGURATION=Release \
 CODE_SIGNING_ALLOWED=NO \
 DERIVED_DATA_PATH="$RELEASE_DERIVED_DATA_PATH" \
-  mise run build
+  run_ci_task build
 
 printf 'Device Hub CI passed.\n'

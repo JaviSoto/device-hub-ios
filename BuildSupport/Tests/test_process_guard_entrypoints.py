@@ -181,10 +181,10 @@ class ProcessGuardEntrypointTests(unittest.TestCase):
     def test_ci_delegates_to_named_mise_tasks(self) -> None:
         contents = (ROOT / "ci" / "run_ci.sh").read_text()
 
-        self.assertIn("mise run test", contents)
-        self.assertIn("mise run protocol:verify", contents)
-        self.assertIn("mise run lint", contents)
-        self.assertIn("mise run previews", contents)
+        self.assertIn("run_ci_task test", contents)
+        self.assertIn("run_ci_task protocol:verify", contents)
+        self.assertIn("run_ci_task lint", contents)
+        self.assertIn("run_ci_task previews", contents)
         self.assertNotIn("test_*.py", contents)
 
 
