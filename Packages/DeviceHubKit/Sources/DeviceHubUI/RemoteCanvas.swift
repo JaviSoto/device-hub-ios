@@ -10,7 +10,6 @@ struct RemoteCanvas: View {
     let isViewingStopped: Bool
     let presentation: RemoteSessionPresentation?
     let remediation: DeviceHubRemediation?
-    let screenInset: CGFloat
     let pairButtonTapped: () -> Void
     let remediationButtonTapped: () -> Void
     let remediationDismissed: () -> Void
@@ -108,8 +107,7 @@ struct RemoteCanvas: View {
             RemoteScreenLayout.size(
                 in: canvasSize,
                 targetPixels: $0.pixelSize,
-                orientation: $0.orientation,
-                inset: screenInset
+                orientation: $0.orientation
             )
         } ?? .zero
         let accessibilityLabel =
@@ -241,29 +239,22 @@ enum RemoteScreenLayout {
     static func size(
         in canvasSize: CGSize,
         targetPixels: PixelSize,
-        orientation: ScreenOrientation,
-        inset: CGFloat
+        orientation: ScreenOrientation
     ) -> CGSize {
         guard canvasSize.width.isFinite,
               canvasSize.height.isFinite,
-              inset.isFinite,
               canvasSize.width > 0,
               canvasSize.height > 0,
-              inset >= 0,
               targetPixels.width > 0,
               targetPixels.height > 0
         else {
             return .zero
         }
 
-        let availableSize = CGSize(
-            width: max(0, canvasSize.width - inset * 2),
-            height: max(0, canvasSize.height - inset * 2)
-        )
         let orientedPixels = orientation.orientedSize(for: targetPixels)
         let scale = min(
-            availableSize.width / CGFloat(orientedPixels.width),
-            availableSize.height / CGFloat(orientedPixels.height)
+            canvasSize.width / CGFloat(orientedPixels.width),
+            canvasSize.height / CGFloat(orientedPixels.height)
         )
         guard scale.isFinite, scale > 0 else {
             return .zero

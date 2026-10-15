@@ -6,8 +6,6 @@ import SwiftUI
 struct RemoteSessionView: View {
     @Bindable var store: StoreOf<RemoteSessionFeature>
     @Binding var isKeyboardPresented: Bool
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHeaderVisible = true
 
@@ -16,18 +14,10 @@ struct RemoteSessionView: View {
     let pairButtonTapped: () -> Void
 
     var body: some View {
-        GeometryReader { geometry in
-            let layout = RemoteSessionChromeLayout(
-                containerSize: geometry.size,
-                horizontalSizeClass: horizontalSizeClass,
-                verticalSizeClass: verticalSizeClass
-            )
+        ZStack {
+            canvas.ignoresSafeArea(.container)
 
-            ZStack {
-                canvas.ignoresSafeArea(.container)
-
-                sessionOverlays(layout)
-            }
+            sessionOverlays
         }
         .background {
             RemoteCanvasColor.value.ignoresSafeArea()
@@ -62,7 +52,6 @@ struct RemoteSessionView: View {
                 isViewingStopped: store.isViewingStopped,
                 presentation: store.sessionPresentation,
                 remediation: store.remediation,
-                screenInset: 0,
                 pairButtonTapped: pairButtonTapped,
                 remediationButtonTapped: remediationButtonTapped,
                 remediationDismissed: remediationDismissed,
@@ -85,7 +74,7 @@ struct RemoteSessionView: View {
         }
     }
 
-    private func sessionOverlays(_ layout: RemoteSessionChromeLayout) -> some View {
+    private var sessionOverlays: some View {
         Color.clear
             .allowsHitTesting(false)
             .overlay(alignment: .top) {
@@ -104,24 +93,14 @@ struct RemoteSessionView: View {
                     buttonTapped: hardwareButtonTapped,
                     deviceSelected: deviceSelected,
                     detailsButtonTapped: detailsButtonTapped,
+                    keyboardButtonTapped: keyboardButtonTapped,
                     pairButtonTapped: pairButtonTapped,
                     reconnectButtonTapped: reconnectButtonTapped,
+                    rotateButtonTapped: rotateButtonTapped,
                     startViewingButtonTapped: startViewingButtonTapped,
                     stopViewingButtonTapped: stopViewingButtonTapped
                 )
                 .padding(6)
-            }
-            .overlay(alignment: layout == .floatingTrailingRail ? .trailing : .bottom) {
-                if store.selectedDevice != nil {
-                    RemoteControlBar(
-                        layout: layout == .floatingTrailingRail ? .verticalRail : .horizontalDock,
-                        acceptsInput: store.acceptsInput,
-                        buttonTapped: hardwareButtonTapped,
-                        keyboardButtonTapped: keyboardButtonTapped,
-                        rotateButtonTapped: rotateButtonTapped
-                    )
-                    .padding(8)
-                }
             }
     }
 

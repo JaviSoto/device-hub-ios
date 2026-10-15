@@ -124,6 +124,11 @@ Use `mise run snapshots:record` when an intentional visual change requires new
 iOS reference images. The task records the matrix and immediately reruns it in
 comparison mode so stale or incomplete references cannot pass silently.
 
+App integration also launches the simulator-only live fixture and checks its
+actual accessibility tree: Home, Lock, Keyboard, and Rotate must be absent
+from the canvas and present after opening More Controls. These checks use the
+production navigation root and never connect to a real device.
+
 ## Authorized-device verification
 
 Protocol work should also be exercised on dedicated hardware owned by the

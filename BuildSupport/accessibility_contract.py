@@ -1,4 +1,4 @@
-"""Validate Device Hub's clean first-run accessibility hierarchy."""
+"""Validate Device Hub's first-run and remote-session accessibility hierarchy."""
 
 from __future__ import annotations
 
@@ -11,10 +11,12 @@ from typing import Any
 
 
 class AccessibilityScreen(StrEnum):
-    """User-visible checkpoints exercised by the clean-install CI flow."""
+    """User-visible checkpoints exercised by app integration tests."""
 
     naming = "naming"
     post_bootstrap = "post-bootstrap"
+    live = "live"
+    controls_menu = "controls-menu"
 
 
 EXPECTED_VALUES = {
@@ -32,6 +34,8 @@ EXPECTED_VALUES = {
             "Your Remote Screen Starts Here",
         }
     ),
+    AccessibilityScreen.live: frozenset({"More Controls"}),
+    AccessibilityScreen.controls_menu: frozenset({"Home", "Lock", "Keyboard", "Rotate"}),
 }
 BLOCKED_VALUES = frozenset(
     {
@@ -43,7 +47,7 @@ BLOCKED_VALUES = frozenset(
 
 @dataclass(frozen=True)
 class AccessibilityInspection:
-    """One hierarchy's readiness and closed startup-failure vocabulary."""
+    """One hierarchy's required and forbidden visible controls."""
 
     values: tuple[str, ...]
     missing: tuple[str, ...]
@@ -51,7 +55,7 @@ class AccessibilityInspection:
 
     @property
     def is_ready(self) -> bool:
-        """Whether the hierarchy exposes the complete clean first-run UI."""
+        """Whether the hierarchy satisfies the selected screen contract."""
 
         return not self.missing and not self.unexpected
 
@@ -71,14 +75,17 @@ def inspect_hierarchy(
     *,
     screen: AccessibilityScreen,
 ) -> AccessibilityInspection:
-    """Reduce AXe JSON to the user-visible first-run contract."""
+    """Reduce AXe JSON to the selected screen's user-visible contract."""
 
     values = tuple(_strings(payload))
     value_set = frozenset(values)
+    blocked_values = BLOCKED_VALUES
+    if screen == AccessibilityScreen.live:
+        blocked_values |= EXPECTED_VALUES[AccessibilityScreen.controls_menu]
     return AccessibilityInspection(
         values=values,
         missing=tuple(sorted(EXPECTED_VALUES[screen].difference(value_set))),
-        unexpected=tuple(sorted(BLOCKED_VALUES.intersection(value_set))),
+        unexpected=tuple(sorted(blocked_values.intersection(value_set))),
     )
 
 
@@ -117,13 +124,12 @@ def main() -> int:
         return 1
     if inspection.unexpected:
         print(
-            "Device Hub's clean simulator launch surfaced a startup failure; "
+            f"Device Hub's {arguments.screen} screen exposed unexpected controls or a startup failure; "
             f"unexpected={list(inspection.unexpected)!r}"
         )
     else:
         print(
-            "AXe hierarchy did not expose Device Hub's clean first-run "
-            "experience; "
+            f"AXe hierarchy did not expose Device Hub's {arguments.screen} screen; "
             f"missing={list(inspection.missing)!r}; "
             f"sample={list(inspection.values[:20])!r}"
         )

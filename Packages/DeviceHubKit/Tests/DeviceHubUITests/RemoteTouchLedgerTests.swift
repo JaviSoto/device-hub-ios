@@ -5,59 +5,16 @@ import Testing
 
 @Suite("Remote touch ledger")
 struct RemoteTouchLedgerTests {
-    @Test("portrait controls float over an edge-to-edge canvas")
-    func compactPhoneChromeUsesOrientationSpecificLayouts() {
-        let portrait = RemoteSessionChromeLayout(
-            containerSize: CGSize(width: 440, height: 956),
-            horizontalSizeClass: .compact
-        )
-        #expect(portrait == .floatingBottomDock)
-        #expect(
-            RemoteSessionChromeLayout(
-                containerSize: CGSize(width: 956, height: 440),
-                horizontalSizeClass: .compact
-            ) == .floatingTrailingRail
-        )
-    }
-
-    @Test("regular iPad windows keep the entire canvas beneath floating controls")
-    func regularWidthChromeUsesNativeToolbar() {
-        #expect(
-            RemoteSessionChromeLayout(
-                containerSize: CGSize(width: 1180, height: 820),
-                horizontalSizeClass: .regular,
-                verticalSizeClass: .regular
-            ) == .floatingBottomDock
-        )
-    }
-
-    @Test("landscape iPhone chrome follows compact height")
-    func landscapeIPhoneChromeUsesTrailingRail() {
-        #expect(
-            RemoteSessionChromeLayout(
-                containerSize: CGSize(width: 1280, height: 589),
-                horizontalSizeClass: .regular,
-                verticalSizeClass: .compact
-            ) == .floatingTrailingRail
-        )
-    }
-
-    @Test("phone control rail keeps native minimum hit targets")
-    func phoneControlRailUsesNativeHitTargets() {
-        #expect(RemoteControlBarMetrics.minimumTargetDimension >= 44)
-    }
-
-    @Test("rendered screen has explicit aspect-fit bounds")
+    @Test("rendered screen uses the whole canvas without padding")
     func renderedScreenUsesExplicitAspectFitBounds() {
         let size = RemoteScreenLayout.size(
             in: CGSize(width: 390, height: 760),
             targetPixels: PixelSize(width: 1504, height: 2272),
-            orientation: .landscapeLeft,
-            inset: 16
+            orientation: .landscapeLeft
         )
 
-        #expect(size.width == 358)
-        #expect(abs(size.height - 236.985_915_492_957_76) < 0.000_000_001)
+        #expect(size.width == 390)
+        #expect(abs(size.height - 258.169_014_084_507_04) < 0.000_000_001)
     }
 
     @Test("input coordinates are local to the rendered remote screen")

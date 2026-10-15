@@ -47,24 +47,22 @@ There is no dashboard and no Devices, Control, Logs, or Settings tab bar.
 
 ## Primary controls
 
-The floating control bar contains four actions:
+The More menu stays close to the top-right corner and contains:
 
 1. Home
 2. Lock
 3. Keyboard
 4. Rotate
 
-The More menu stays close to the top-right corner.
-
-Secondary hardware controls, capture actions, reconnect, and stop-viewing live
-inside menus.
+Secondary hardware controls, device selection, pairing, reconnect, and
+stop-viewing live in the same menu. There is no bottom action bar or trailing
+control rail. The remote canvas has no app-added padding.
 
 ## Platform adaptation
 
 - iPhone and iPad use one full-window remote-session screen. The More menu
   contains device selection. Device details use a sheet.
-- iPhone landscape places the hardware controls along the trailing edge.
-- Portrait and iPad windows place the controls near the bottom edge.
+- Every window size keeps hardware actions inside the corner menu.
 - Both platforms support light and dark appearance, Dynamic Type, portrait and
   landscape targets, reduced motion, VoiceOver, and hardware keyboards.
 

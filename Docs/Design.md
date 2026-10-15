@@ -14,12 +14,11 @@ The app hard-targets iOS/iPadOS 27 and uses current SwiftUI directly:
   toolbar space around it;
 - a centered device name and status overlay that fades three seconds after a
   live connection, and stays visible when the connection needs attention;
-- `GlassEffectContainer` for the compact, related remote-control surface rather
-  than separate ornamental capsules;
 - transformed `onGeometryChange` values only when layout geometry must enter
   feature state;
-- floating hardware controls and a 44-point More menu near the top-right
-  corner, which contains device selection, pairing, details, and session options.
+- a single 44-point More menu near the top-right corner, which contains Home,
+  Lock, Keyboard, Rotate, device selection, pairing, details, and session options;
+- no bottom action bar, trailing control rail, or app-added canvas padding.
 
 Liquid Glass gives the small controls contrast over the device image. The
 rest of the canvas remains clear.

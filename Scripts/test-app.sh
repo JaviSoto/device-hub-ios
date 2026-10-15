@@ -135,6 +135,9 @@ if [[ "$RECORD_SNAPSHOTS" == "1" ]]; then
   set -e
   printf 'Snapshot recording pass exited %d; verifying references.\n' \
     "$record_status"
+  if [[ "$record_status" != "0" && "$record_status" != "65" ]]; then
+    exit "$record_status"
+  fi
 elif [[ "$RECORD_SNAPSHOTS" != "0" ]]; then
   printf 'DEVICE_HUB_RECORD_SNAPSHOTS must be 0 or 1.\n' >&2
   exit 2
@@ -202,16 +205,43 @@ if [[ "$INITIAL_SCREEN" == "naming" ]]; then
     --udid "$SIMULATOR_UDID"
 fi
 
+POST_BOOTSTRAP_READY=0
 for _attempt in {1..60}; do
   if accessibility_matches post-bootstrap; then
-    printf 'App integration and accessibility tests passed.\n'
-    exit 0
+    POST_BOOTSTRAP_READY=1
+    break
   fi
   sleep 0.5
 done
 
-python3 BuildSupport/accessibility_contract.py \
-  --screen post-bootstrap \
-  "$ACCESSIBILITY_JSON" || true
-printf 'The app did not reach its post-bootstrap accessibility contract.\n' >&2
-exit 1
+if [[ "$POST_BOOTSTRAP_READY" != "1" ]]; then
+  python3 BuildSupport/accessibility_contract.py \
+    --screen post-bootstrap "$ACCESSIBILITY_JSON" || true
+  printf 'The app did not reach its post-bootstrap accessibility contract.\n' >&2
+  exit 1
+fi
+
+# Exercise the production root with synthetic remote pixels, never live devices.
+xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_IDENTIFIER"
+xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_IDENTIFIER" \
+  --device-hub-fixture live >/dev/null
+for _attempt in {1..60}; do
+  if accessibility_matches live; then
+    break
+  fi
+  sleep 0.5
+done
+cp "$ACCESSIBILITY_JSON" "$EVIDENCE_ROOT/live-screen.json"
+python3 BuildSupport/accessibility_contract.py --screen live "$ACCESSIBILITY_JSON"
+
+axe tap --label 'More Controls' --element-type PopUpButton --wait-timeout 10 \
+  --post-delay 0.5 --udid "$SIMULATOR_UDID"
+for _attempt in {1..60}; do
+  if accessibility_matches controls-menu; then
+    break
+  fi
+  sleep 0.5
+done
+cp "$ACCESSIBILITY_JSON" "$EVIDENCE_ROOT/controls-menu.json"
+python3 BuildSupport/accessibility_contract.py --screen controls-menu "$ACCESSIBILITY_JSON"
+printf 'App integration, edge-to-edge screen, and overflow menu tests passed.\n'
