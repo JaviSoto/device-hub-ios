@@ -45,6 +45,23 @@ def different_group_descendant_program(identity_path: Path) -> str:
 
 
 class GuardedProcessTests(unittest.TestCase):
+    def test_test_service_cleanup_reports_the_inspection_failure(self) -> None:
+        with (
+            mock.patch.object(
+                guarded_process,
+                "cleanup_selected_xcode_test_service_hub",
+                side_effect=OSError("process inspection timed out after 2 seconds"),
+            ),
+            mock.patch("sys.stderr") as stderr,
+        ):
+            status = guarded_process.main([
+                "--cleanup-selected-xcode-test-service-hub",
+                "--developer-dir", "/Applications/Xcode.app/Contents/Developer",
+            ])
+
+        self.assertEqual(status, 1)
+        self.assertIn("process inspection timed out after 2 seconds", str(stderr.write.call_args_list))
+
     def test_session_inspection_fetches_commands_only_for_session_members(self) -> None:
         inspection_results = (
             subprocess.CompletedProcess(

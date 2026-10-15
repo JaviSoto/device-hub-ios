@@ -29,7 +29,9 @@ RESIDUAL_PROCESS_EXIT_STATUS = 125
 CLEANUP_FAILURE_EXIT_STATUS = 126
 LOCK_METADATA_MAXIMUM_BYTES = 4_096
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
-PROCESS_INSPECTION_TIMEOUT_SECONDS = 2.0
+# Native XCTest teardown can briefly saturate the host. Keep inventory bounded
+# without killing a successful build merely because ps missed a two-second slot.
+PROCESS_INSPECTION_TIMEOUT_SECONDS = 10.0
 MAXIMUM_KILL_SWEEPS = 3
 WATCHDOG_NORMAL_COMPLETION_MESSAGE = b"device-hub-guard-complete-v1"
 PROCESS_STATUS_EXECUTABLES = (Path("/bin/ps"), Path("/usr/bin/ps"))
@@ -1069,9 +1071,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 )
                 else 1
             )
-        except OSError:
+        except OSError as error:
             print(
-                "Could not clean up Xcode's detached test service.",
+                f"Could not clean up Xcode's detached test service: {error}.",
                 file=sys.stderr,
             )
             return 1
