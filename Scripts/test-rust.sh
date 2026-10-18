@@ -10,6 +10,37 @@ readonly PROCESS_GUARD="$REPOSITORY_ROOT/BuildSupport/process_guard.sh"
 source "$PROCESS_GUARD"
 devicehub_require_guard test-rust 1800 "$0" "$@"
 
+readonly SHARED_IOS_SUPPORT_DIR="${SHARED_IOS_SUPPORT_DIR:-$HOME/code/ios-build-support}"
+readonly DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
+readonly LOGGED_RUNNER="$SHARED_IOS_SUPPORT_DIR/scripts/run_logged.py"
+if [[ ! -r "$LOGGED_RUNNER" ]]; then
+  echo "error: missing shared build logger: $LOGGED_RUNNER" >&2
+  exit 1
+fi
+readonly OUTPUT_ROOT="$DERIVED_DATA_PATH/RunOutputs"
+mkdir -p "$OUTPUT_ROOT"
+RUN_DIRECTORY="$(mktemp -d "$OUTPUT_ROOT/devicehub-rust-test.XXXXXXXX")"
+readonly RUN_DIRECTORY
+
+run_logged() {
+  local label="${1:?label required}"
+  local timeout="${2:?timeout required}"
+  shift 2
+
+  local log_path="$RUN_DIRECTORY/$label.log"
+  if python3 "$LOGGED_RUNNER" \
+    --log "$log_path" \
+    --label "devicehub-$label" \
+    --timeout "$timeout" \
+    -- "$@"; then
+    return 0
+  else
+    local status=$?
+    printf 'Rust step %s failed; log: %s\n' "$label" "$log_path" >&2
+    return "$status"
+  fi
+}
+
 readonly MANIFEST="$REPOSITORY_ROOT/Rust/Cargo.toml"
 readonly IDEVICE_MANIFEST="$REPOSITORY_ROOT/Vendor/idevice/Cargo.toml"
 readonly IDEVICE_REVISION="a64b8867815b3da17b5c927531bdba877e8456ef"
@@ -41,14 +72,14 @@ fi
   --package idevice \
   -- \
   --check
-"${CARGO[@]}" test \
+run_logged test-idevice 1740 "${CARGO[@]}" test \
   --manifest-path "$IDEVICE_MANIFEST" \
   --package idevice \
   --no-default-features \
   --features ring,remote_pairing,tunnel_tcp_stack,display_stream,mobile_image_mounter \
   --lib \
   --locked
-"${CARGO[@]}" clippy \
+run_logged clippy-idevice 1740 "${CARGO[@]}" clippy \
   --manifest-path "$IDEVICE_MANIFEST" \
   --package idevice \
   --no-default-features \
@@ -58,16 +89,16 @@ fi
   --locked \
   -- \
   -D warnings
-"${CARGO[@]}" check \
+run_logged check-idevice-full 1740 "${CARGO[@]}" check \
   --manifest-path "$IDEVICE_MANIFEST" \
   --package idevice \
   --features full \
   --locked
-"${CARGO[@]}" test \
+run_logged test-device-hub-ffi 1740 "${CARGO[@]}" test \
   --manifest-path "$MANIFEST" \
   --package device-hub-ffi \
   --locked
-"${CARGO[@]}" clippy \
+run_logged clippy-device-hub-ffi 1740 "${CARGO[@]}" clippy \
   --manifest-path "$MANIFEST" \
   --package device-hub-ffi \
   --all-targets \
@@ -89,3 +120,4 @@ for feature in ring remote_pairing tunnel_tcp_stack display_stream mobile_image_
 done
 
 echo "Rust boundary tests and dependency checks passed."
+printf 'Rust test logs: %s\n' "$RUN_DIRECTORY"

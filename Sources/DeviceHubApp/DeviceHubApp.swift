@@ -16,6 +16,7 @@ import SwiftUI
 struct DeviceHubApp: App {
     @Environment(\.scenePhase) private var scenePhase
     private let content: AnyView
+    private let reportsInstallation: Bool
 
     @MainActor
     init() {
@@ -24,6 +25,11 @@ struct DeviceHubApp: App {
                 arguments: ProcessInfo.processInfo.arguments
             ) {
             case let .fixture(fixture):
+                content = AnyView(DeviceHubDebugFixtureRoot(fixture: fixture))
+                reportsInstallation = false
+                return
+
+            case let .preview(fixture):
                 do {
                     content = try AnyView(
                         fixture.makeView()
@@ -36,12 +42,14 @@ struct DeviceHubApp: App {
                         )
                     )
                 }
+                reportsInstallation = false
                 return
 
             case let .invalid(message):
                 content = AnyView(
                     DeviceHubDebugConfigurationErrorView(message: message)
                 )
+                reportsInstallation = false
                 return
 
             case .live:
@@ -52,13 +60,16 @@ struct DeviceHubApp: App {
         content = AnyView(
             DeviceHubLiveBootstrapView()
         )
+        reportsInstallation = true
     }
 
     var body: some Scene {
         WindowGroup {
             content
                 .task(id: scenePhase) {
-                    guard scenePhase == .active else { return }
+                    guard reportsInstallation, scenePhase == .active else {
+                        return
+                    }
                     await DeviceHubInstalledAppReporter
                         .reportCurrentInstallation()
                 }
@@ -288,29 +299,28 @@ private struct DeviceHubAdvertisedNameSetupView: View {
 
 /// Runs product and diagnostics lifecycle effects from one SwiftUI scene.
 @MainActor
-private struct DeviceHubLiveContentView: View {
+struct DeviceHubLiveContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var remoteDiagnostics:
         DeviceHubRemoteDiagnosticsSettings
 
     let store: StoreOf<RemoteSessionFeature>
-    let diagnostics: DeviceHubDiagnosticsRuntime
+    let diagnostics: DeviceHubDiagnosticsRuntime?
 
     init(
         store: StoreOf<RemoteSessionFeature>,
-        diagnostics: DeviceHubDiagnosticsRuntime
+        diagnostics: DeviceHubDiagnosticsRuntime?
     ) {
         self.store = store
         self.diagnostics = diagnostics
         _remoteDiagnostics = State(
             initialValue: DeviceHubRemoteDiagnosticsSettings(
                 destinationHost:
-                diagnostics.remoteDiagnosticsDestinationHost,
+                diagnostics?.remoteDiagnosticsDestinationHost,
                 isEnabled:
-                diagnostics.isRemoteDiagnosticsSharingEnabled,
+                diagnostics?.isRemoteDiagnosticsSharingEnabled ?? false,
                 setEnabled: {
-                    diagnostics
-                        .setRemoteDiagnosticsSharingEnabled($0)
+                    diagnostics?.setRemoteDiagnosticsSharingEnabled($0)
                 }
             )
         )
@@ -322,6 +332,7 @@ private struct DeviceHubLiveContentView: View {
             remoteDiagnostics: remoteDiagnostics
         )
         .task(id: scenePhase) {
+            guard let diagnostics else { return }
             switch scenePhase {
             case .active:
                 await diagnostics.recordLifecycle(.foreground)
@@ -345,7 +356,8 @@ private struct DeviceHubLiveContentView: View {
     ///
     /// Release builds do not compile this type or any fixture branch.
     private enum DeviceHubDebugLaunchSelection {
-        case fixture(DeviceHubPreviewFixture)
+        case fixture(DeviceHubAppFixture)
+        case preview(DeviceHubPreviewFixture)
         case invalid(String)
         case live
 
@@ -370,17 +382,23 @@ private struct DeviceHubLiveContentView: View {
             }
 
             let value = arguments[valueIndex]
-            guard let fixture = DeviceHubPreviewFixture(rawValue: value) else {
-                let validValues = DeviceHubPreviewFixture.allCases
-                    .map(\.rawValue)
-                    .sorted()
-                    .joined(separator: ", ")
-                self = .invalid(
-                    "Unknown fixture \(value). Valid fixtures: \(validValues)."
-                )
+            if let fixture = DeviceHubAppFixture(rawValue: value) {
+                self = .fixture(fixture)
                 return
             }
-            self = .fixture(fixture)
+            if let fixture = DeviceHubPreviewFixture(rawValue: value) {
+                self = .preview(fixture)
+                return
+            }
+            let validValues = Set(
+                DeviceHubAppFixture.allCases.map(\.rawValue)
+                    + DeviceHubPreviewFixture.allCases.map(\.rawValue)
+            )
+            .sorted()
+            .joined(separator: ", ")
+            self = .invalid(
+                "Unknown fixture \(value). Valid fixtures: \(validValues)."
+            )
         }
     }
 

@@ -21,7 +21,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 API_BASE_URL="https://api.builds.lan"
-UPLOAD_CLIENT="${BUILDS_LAN_UPLOAD_CLIENT:-/Volumes/RunnerCache/code/builds-native/Scripts/upload-builds-lan-api.py}"
+UPLOAD_CLIENT="${BUILDS_LAN_UPLOAD_CLIENT:-${BUILDS_NATIVE_DIR:-$HOME/code/builds-native}/Scripts/upload-builds-lan-api.py}"
 BUILDS_LAN_CA_FILE="${BUILDS_LAN_CA_FILE:-$(dirname "$UPLOAD_CLIENT")/../Packages/BuildsKit/Sources/BuildsCore/Resources/builds-lan-root-ca.pem}"
 UPLOAD_TOKEN_FILE="${BUILDS_LAN_UPLOAD_TOKEN_FILE:-}"
 CODEX_SECRET_BIN="${CODEX_SECRET_BIN:-$HOME/.local/bin/codex-secret}"

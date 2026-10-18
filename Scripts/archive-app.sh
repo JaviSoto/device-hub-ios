@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 # shellcheck source=BuildSupport/process_guard.sh
 source "$PROCESS_GUARD"
+# shellcheck source=BuildSupport/check_xcode_toolchain.sh
+source "$ROOT/BuildSupport/check_xcode_toolchain.sh"
 # shellcheck source=BuildSupport/signing_keychain.sh
 source "$ROOT/BuildSupport/signing_keychain.sh"
 devicehub_require_guard archive-app 1800 "$0" "$@"
@@ -22,6 +24,7 @@ if [[ ! -d "$DEVELOPER_DIR" ]]; then
   exit 1
 fi
 export DEVELOPER_DIR
+devicehub_check_xcode_toolchain
 
 XCODEBUILD_ARGS=(
   -quiet

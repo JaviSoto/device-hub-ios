@@ -28,7 +28,7 @@ class ReleasePathTests(unittest.TestCase):
         self.assertIn("build-device-ipa.sh", release)
         self.assertIn("publish-builds-lan.sh", release)
         self.assertIn(
-            "/Volumes/RunnerCache/code/builds-native/Scripts/upload-builds-lan-api.py",
+            "${BUILDS_NATIVE_DIR:-$HOME/code/builds-native}/Scripts/upload-builds-lan-api.py",
             publish,
         )
         self.assertIn('API_BASE_URL="https://api.builds.lan"', publish)
@@ -61,17 +61,18 @@ class ReleasePathTests(unittest.TestCase):
         self.assertIn("DEVICE_HUB_SOURCE_REVISION =", project)
         self.assertIn('DEVICE_HUB_SOURCE_REVISION="$SOURCE_REVISION"', build)
 
-    def test_device_release_uses_current_xcode_and_external_derived_data(self) -> None:
+    def test_device_release_uses_current_xcode_and_native_derived_data(self) -> None:
         build = (ROOT / "Scripts/build-device-ipa.sh").read_text()
 
         self.assertIn('/usr/bin/xcode-select -p', build)
         self.assertNotIn("Xcode-27.0.0-beta.3", build)
         self.assertIn(
-            '"${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData}"',
+            '"${DERIVED_DATA_PATH:-$NATIVE_DERIVED_DATA_ROOT/DeviceHub}"',
             build,
         )
-        self.assertIn("/Volumes/RunnerCache/DerivedData/javi", build)
-        self.assertIn("df -P", build)
+        self.assertIn('"$HOME/Library/Developer/Xcode/DerivedData"', build)
+        self.assertIn("devicehub_check_xcode_toolchain", build)
+        self.assertIn('"$DERIVED_DATA_EXTERNAL_ROOT/"*', build)
 
     def test_apple_signing_uses_codex_secret_private_fd_by_default(self) -> None:
         build = (ROOT / "Scripts/build-device-ipa.sh").read_text()
@@ -102,14 +103,25 @@ class ReleasePathTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, 'synthetic-profile\n')
 
-    def test_xcodebuild_keeps_raw_and_formatted_output_and_result_bundle(self) -> None:
+    def test_xcodebuild_uses_bounded_shared_logging_and_result_bundle(self) -> None:
         build = (ROOT / "Scripts/build-device-ipa.sh").read_text()
 
         self.assertIn('"$raw_log"', build)
-        self.assertIn("xcbeautify", build)
-        self.assertIn('statuses=("${PIPESTATUS[@]}")', build)
+        self.assertIn("run_logged.py", build)
+        self.assertNotIn("xcbeautify", build)
         self.assertIn("-resultBundlePath", build)
         self.assertNotIn("-quiet archive", build)
+
+    def test_protocol_and_package_builds_keep_full_logs_out_of_console(self) -> None:
+        for relative_path in (
+            "Scripts/build-protocol-xcframework.sh",
+            "Scripts/test-core.sh",
+            "Scripts/test-rust.sh",
+        ):
+            script = (ROOT / relative_path).read_text()
+            with self.subTest(script=relative_path):
+                self.assertIn("run_logged.py", script)
+                self.assertIn("RunOutputs", script)
 
     def test_build_output_fixtures_keep_logs_paths_and_original_status(self) -> None:
         with tempfile.TemporaryDirectory(prefix="device-hub-xcode-output-") as scratch:
@@ -122,10 +134,9 @@ class ReleasePathTests(unittest.TestCase):
             self.assertEqual(success[0].returncode, 0, success[0].stderr)
             self.assertTrue(success[2].is_dir())
             self.assertEqual(success[1].read_text(), "warning: fixture warning\n")
-            self.assertEqual(
-                success[0].stdout,
-                "formatted:warning: fixture warning\nFUNCTION_STATUS=0\n",
-            )
+            self.assertIn('"label": "devicehub-success"', success[0].stdout)
+            self.assertIn("FUNCTION_STATUS=0", success[0].stdout)
+            self.assertNotIn("formatted:", success[0].stdout)
             self.assertIn("XCODEBUILD_OK action=success", success[0].stderr)
             self.assertIn(str(success[2]), success[0].stderr)
 
@@ -140,8 +151,9 @@ class ReleasePathTests(unittest.TestCase):
                 compile_failure[1].read_text(),
                 "warning: compile fixture\nerror: compile failed\n",
             )
-            self.assertIn("formatted:error: compile failed", compile_failure[0].stdout)
-            self.assertIn("xcodebuild_exit=65", compile_failure[0].stderr)
+            self.assertIn('"exit_code": 65', compile_failure[0].stdout)
+            self.assertIn("error: compile failed", compile_failure[0].stdout)
+            self.assertNotIn("formatted:", compile_failure[0].stdout)
             self.assertIn(str(compile_failure[2]), compile_failure[0].stderr)
 
             test_failure = self._run_build_output_fixture(
@@ -154,8 +166,8 @@ class ReleasePathTests(unittest.TestCase):
             self.assertEqual(
                 test_failure[1].read_text(), "Test Suite fixture failed\n"
             )
-            self.assertIn("formatted:Test Suite fixture failed", test_failure[0].stdout)
-            self.assertIn("xcodebuild_exit=65", test_failure[0].stderr)
+            self.assertIn('"exit_code": 65', test_failure[0].stdout)
+            self.assertNotIn("formatted:", test_failure[0].stdout)
             self.assertIn(str(test_failure[2]), test_failure[0].stderr)
 
     def test_publisher_uses_builds_secret_private_fd_by_default(self) -> None:
@@ -315,17 +327,12 @@ class ReleasePathTests(unittest.TestCase):
         if match is None:
             raise AssertionError("release script has no run_xcodebuild helper")
 
-        formatter = scratch / "fixture-xcbeautify"
-        formatter.write_text(
-            "#!/bin/bash\nset -euo pipefail\n/usr/bin/sed 's/^/formatted:/'\n"
-        )
-        formatter.chmod(0o755)
         raw_log = scratch / f"{action}.log"
         result_bundle = scratch / f"{action}.xcresult"
         shell = "\n".join(
             (
                 "set -euo pipefail",
-                f"XCBEAUTIFY_BIN={shlex.quote(str(formatter))}",
+                f"SHARED_IOS_SUPPORT_DIR={shlex.quote('/Users/javi/code/ios-build-support')}",
                 match.group(),
                 "set +e",
                 "run_xcodebuild "
@@ -337,6 +344,7 @@ class ReleasePathTests(unittest.TestCase):
             )
         )
         env = os.environ.copy()
+        env["PATH"] = f"/opt/homebrew/bin:{env['PATH']}"
         env["FIXTURE_RESULT"] = str(result_bundle)
         result = subprocess.run(
             ["/bin/bash", "-c", shell],

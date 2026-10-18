@@ -32,7 +32,7 @@ DeviceHubApp
   validated endpoint.
 - `DeviceHubDiagnostics` accepts only a deliberately redacted event vocabulary.
 
-The app and every package hard-target iOS/iPadOS 27. There are no availability
+The app and every package hard-target iOS/iPadOS 27.1. There are no availability
 branches or legacy transport modes.
 
 ## Session ownership

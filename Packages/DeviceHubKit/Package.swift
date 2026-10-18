@@ -6,7 +6,7 @@ let package = Package(
     name: "DeviceHubKit",
     defaultLocalization: "en",
     platforms: [
-        .iOS(.v27),
+        .iOS("27.1"),
         .macOS(.v26)
     ],
     products: [

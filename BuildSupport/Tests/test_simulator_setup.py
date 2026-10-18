@@ -19,8 +19,18 @@ CREATED_UDID = "11111111-2222-3333-4444-555555555555"
 
 
 class FakeCommandRunner:
-    def __init__(self, devices: list[dict[str, object]] | None = None) -> None:
+    def __init__(
+        self,
+        devices: list[dict[str, object]] | None = None,
+        runtimes: list[dict[str, object]] | None = None,
+    ) -> None:
         self.devices = devices or []
+        self.runtimes = runtimes if runtimes is not None else [
+            {
+                "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
+                "isAvailable": True,
+            }
+        ]
         self.calls: list[tuple[tuple[str, ...], bool]] = []
         self.fail_slim = False
         self.fail_verify = False
@@ -30,18 +40,9 @@ class FakeCommandRunner:
     def __call__(self, arguments: tuple[str, ...], check: bool = True) -> str:
         self.calls.append((arguments, check))
         if arguments[1:5] == ("simctl", "list", "devices", "available"):
-            return json.dumps({"devices": {"iOS 27.0": self.devices}})
+            return json.dumps({"devices": {"iOS 27.1": self.devices}})
         if arguments[1:4] == ("simctl", "list", "runtimes"):
-            return json.dumps(
-                {
-                    "runtimes": [
-                        {
-                            "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
-                            "isAvailable": True,
-                        }
-                    ]
-                }
-            )
+            return json.dumps({"runtimes": self.runtimes})
         if arguments[1:4] == ("simctl", "list", "devicetypes"):
             return json.dumps(
                 {
@@ -139,6 +140,47 @@ class SimulatorSetupTests(unittest.TestCase):
         self.which_patch = mock.patch.object(simulator_setup.shutil, "which", return_value=None)
         self.which_patch.start()
         self.addCleanup(self.which_patch.stop)
+
+    def test_selects_newest_runtime_at_or_above_the_app_floor(self) -> None:
+        runner = FakeCommandRunner(
+            runtimes=[
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+                    "isAvailable": True,
+                },
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
+                    "isAvailable": True,
+                },
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2",
+                    "isAvailable": True,
+                },
+            ]
+        )
+
+        self.assertEqual(
+            simulator_setup.runtime_identifier(runner),
+            "com.apple.CoreSimulator.SimRuntime.iOS-27-2",
+        )
+
+    def test_rejects_runtime_below_the_app_floor(self) -> None:
+        runner = FakeCommandRunner(
+            runtimes=[
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+                    "isAvailable": True,
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            simulator_setup.SimulatorSetupError,
+            "no available iOS 27.1 or later simulator runtime",
+        ):
+            simulator_setup.runtime_identifier(runner)
+
+        self.assertEqual(runner.created_device_types, [])
 
     def test_creates_unique_task_owned_simulator_and_profiles_same_udid(self) -> None:
         runner = FakeCommandRunner()
@@ -388,27 +430,31 @@ class SimulatorSetupTests(unittest.TestCase):
         self.assertNotIn('RUN_ROOT/DerivedData', contents)
         self.assertIn('CODE_SIGNING_ALLOWED=YES', contents)
         self.assertIn('DEVICE_HUB_TEST_EVIDENCE_DIR', contents)
-        self.assertIn('devicehub_run_xcodebuild_test', contents)
-        self.assertLess(
-            contents.index('command -v "$XCBEAUTIFY_COMMAND"'),
-            contents.index("devicehub_require_simulator"),
-        )
+        self.assertIn('devicehub_run_xcodebuild', contents)
+        self.assertNotIn('XCBEAUTIFY_COMMAND', contents)
         self.assertNotIn("codex-simulator-lease", contents)
 
-    def test_native_test_producers_retain_formatted_evidence_and_derived_data(self) -> None:
+    def test_native_test_producers_retain_bounded_evidence_and_derived_data(self) -> None:
         live_tests = (ROOT / "Scripts" / "test-live-ios.sh").read_text()
         snapshots = (ROOT / "Scripts" / "test-app.sh").read_text()
         dead_code = (ROOT / "Scripts" / "lint-dead-code.sh").read_text()
+        output_helper = (ROOT / "BuildSupport" / "xcodebuild_test_output.sh").read_text()
 
-        self.assertIn("devicehub_run_xcodebuild_test", live_tests)
+        self.assertIn("devicehub_run_xcodebuild", live_tests)
         self.assertIn("devicehub-live-tests-$RUN_ID.xcresult", live_tests)
         self.assertIn("Library/Developer/Xcode/DerivedData/DeviceHub", live_tests)
+        self.assertNotIn("XCBEAUTIFY_COMMAND", live_tests)
         self.assertNotIn("-quiet", live_tests)
-        self.assertIn("devicehub_run_xcodebuild_test", snapshots)
+        self.assertIn("devicehub_run_xcodebuild", snapshots)
         self.assertIn("devicehub-ui-snapshot-$pass_name-$RUN_ID.xcresult", snapshots)
         self.assertIn('DERIVED_DATA_PATH="$DERIVED_DATA_PATH"', snapshots)
+        self.assertNotIn("XCBEAUTIFY_COMMAND", snapshots)
         self.assertNotIn("-quiet", snapshots)
+        self.assertIn("run_logged.py", output_helper)
+        self.assertNotIn("tee", output_helper)
         self.assertIn('PACKAGE_DERIVED_DATA="$DERIVED_DATA_PATH/Periphery/DeviceHubKit"', dead_code)
+        self.assertIn("devicehub_run_xcodebuild", dead_code)
+        self.assertNotIn("tee", dead_code)
         self.assertNotIn('mktemp -d', dead_code)
 
     def test_ci_keeps_release_outputs_in_native_derived_data(self) -> None:
@@ -426,7 +472,7 @@ class SimulatorSetupTests(unittest.TestCase):
         self.assertIn('--skip-build', app_scan)
         self.assertIn('--index-store-path "$DERIVED_DATA_PATH/Index.noindex/DataStore"', app_scan)
         self.assertNotIn('-derivedDataPath', app_scan)
-        self.assertLess(contents.index('devicehub_run_xcodebuild_test'), contents.index('periphery scan'))
+        self.assertLess(contents.index('devicehub_run_xcodebuild'), contents.index('periphery scan'))
 
     def test_simulator_guard_has_no_retired_shared_supervisor_path(self) -> None:
         contents = (ROOT / "BuildSupport" / "simulator_guard.sh").read_text()

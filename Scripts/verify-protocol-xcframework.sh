@@ -16,7 +16,7 @@ readonly XCFRAMEWORK="${1:-$REPOSITORY_ROOT/Rust/Artifacts/DeviceHubFFI.xcframew
 readonly DEVICE_SLICE="$XCFRAMEWORK/ios-arm64"
 readonly SIMULATOR_SLICE="$XCFRAMEWORK/ios-arm64-simulator"
 readonly LIBRARY_NAME="libdevice_hub_ffi.a"
-readonly EXPECTED_MINIMUM="27.0"
+readonly EXPECTED_MINIMUM="27.1"
 
 if [[ ! -d "$XCFRAMEWORK" ]]; then
   echo "error: XCFramework does not exist: $XCFRAMEWORK" >&2
@@ -106,4 +106,4 @@ verify_slice \
   -I "$SOURCE_HEADERS" \
   "$SMOKE_SOURCE"
 
-echo "Verified Device Hub XCFramework: arm64 iOS 27 + arm64 Simulator 27."
+echo "Verified Device Hub XCFramework: arm64 iOS 27.1 + arm64 Simulator 27.1."

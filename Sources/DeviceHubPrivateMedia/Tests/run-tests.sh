@@ -8,6 +8,8 @@ repository_root=$(cd "$tests_dir/../../.." && pwd)
 process_guard="$repository_root/BuildSupport/process_guard.sh"
 # shellcheck source=BuildSupport/process_guard.sh
 source "$process_guard"
+# shellcheck source=BuildSupport/check_xcode_toolchain.sh
+source "$repository_root/BuildSupport/check_xcode_toolchain.sh"
 devicehub_require_guard private-media-tests 900 "$0" "$@"
 
 ROOT="$repository_root"
@@ -38,14 +40,18 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ $(uname -s) != Darwin ]]; then
-  printf 'DeviceHubPrivateMedia tests require macOS and Xcode 27.\n' >&2
+  printf 'DeviceHubPrivateMedia tests require macOS and Xcode 27.1 or later.\n' >&2
   exit 1
 fi
 
+DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+export DEVELOPER_DIR
+devicehub_check_xcode_toolchain
+
 iphoneos_version=$(xcrun --sdk iphoneos --show-sdk-version)
 iphonesimulator_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
-if [[ ${iphoneos_version%%.*} != 27 || ${iphonesimulator_version%%.*} != 27 ]]; then
-  printf 'Expected iOS 27 SDKs, found device=%s simulator=%s.\n' \
+if [[ "$iphoneos_version" != "$iphonesimulator_version" ]]; then
+  printf 'Device and simulator SDK versions do not match: device=%s simulator=%s.\n' \
     "$iphoneos_version" "$iphonesimulator_version" >&2
   exit 1
 fi
@@ -76,12 +82,12 @@ xcrun --sdk macosx clang++ \
   -o "$work_dir/DeviceHubPrivateMediaTests"
 "$work_dir/DeviceHubPrivateMediaTests"
 
-printf 'Compiling and linking the iPhoneOS 27 probe with warnings as errors...\n'
+printf 'Compiling and linking the iPhoneOS 27.1 probe with warnings as errors...\n'
 iphoneos_sdk=$(xcrun --sdk iphoneos --show-sdk-path)
 xcrun --sdk iphoneos clang++ \
   "${common_flags[@]}" \
   -framework UIKit \
-  -target arm64-apple-ios27.0 \
+  -target arm64-apple-ios27.1 \
   -isysroot "$iphoneos_sdk" \
   "${common_sources[@]}" \
   "$module_dir/Probe/main.mm" \
@@ -103,7 +109,7 @@ cp "$module_dir/Probe/Info.plist" "$probe_app/Info.plist"
 xcrun --sdk iphonesimulator clang++ \
   "${common_flags[@]}" \
   -framework UIKit \
-  -target "$simulator_arch-apple-ios27.0-simulator" \
+  -target "$simulator_arch-apple-ios27.1-simulator" \
   -isysroot "$simulator_sdk" \
   "${common_sources[@]}" \
   "$module_dir/Probe/main.mm" \
@@ -116,12 +122,12 @@ simulator_udid=${DEVICE_HUB_SIMULATOR_UDID:?simulator setup did not provide a UD
 simulator_runtime_version=$(
   xcrun simctl getenv "$simulator_udid" SIMULATOR_RUNTIME_VERSION
 )
-if [[ ${simulator_runtime_version%%.*} != 27 ]]; then
-  printf 'Expected an iOS 27 simulator, found %s (%s).\n' \
+if ! is_ios_271_or_later "$simulator_runtime_version"; then
+  printf 'Expected an iOS 27.1 or later simulator, found %s (%s).\n' \
     "$simulator_runtime_version" "$simulator_udid" >&2
   exit 1
 fi
-printf 'Running the fail-closed iOS 27 Simulator runtime probe...\n'
+printf 'Running the fail-closed iOS 27.1 Simulator runtime probe...\n'
 
 probe_home="$work_dir/probe-home"
 mkdir -p "$probe_home/Documents"

@@ -1,8 +1,9 @@
 name: DeviceHub
 options:
   createIntermediateGroups: true
+  xcodeVersion: "27.1"
   deploymentTarget:
-    iOS: "27.0"
+    iOS: "27.1"
 settings:
   base:
     ALWAYS_SEARCH_USER_PATHS: "NO"
@@ -12,8 +13,8 @@ settings:
     ENABLE_STRICT_OBJC_MSGSEND: "YES"
     ENABLE_USER_SCRIPT_SANDBOXING: "YES"
     "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
-    IPHONEOS_DEPLOYMENT_TARGET: "27.0"
-    MARKETING_VERSION: "1.0.3"
+    IPHONEOS_DEPLOYMENT_TARGET: "27.1"
+    MARKETING_VERSION: "1.0.4"
     SWIFT_STRICT_CONCURRENCY: complete
     SWIFT_VERSION: "6.0"
 packages:
@@ -91,6 +92,7 @@ targets:
       - target: DeviceHubLive
         embed: false
       - target: DeviceHubPrivateMedia
+        embed: false
       - framework: Rust/Artifacts/DeviceHubFFI.xcframework
         embed: false
         link: true
@@ -112,6 +114,7 @@ targets:
       base:
         CODE_SIGN_ENTITLEMENTS: Config/DeviceHub.entitlements
         CODE_SIGN_STYLE: "$(DEVICE_HUB_CODE_SIGN_STYLE)"
+        DEVICE_HUB_BUNDLE_IDENTIFIER: es.javisoto.DeviceHub
         DEVELOPMENT_TEAM: "$(DEVICE_HUB_DEVELOPMENT_TEAM)"
         INFOPLIST_FILE: Config/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: "$(DEVICE_HUB_BUNDLE_IDENTIFIER)"

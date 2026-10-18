@@ -21,7 +21,8 @@ LATEST_ROOT="${DEVICE_HUB_LATEST_ROOT:-$ROOT/build/device/latest}"
 ARCHIVE_PATH="$BUILD_ROOT/DeviceHub.xcarchive"
 EXPORT_PATH="$BUILD_ROOT/export"
 EXPORT_OPTIONS="$BUILD_ROOT/ExportOptions.generated.plist"
-DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData}"
+NATIVE_DERIVED_DATA_ROOT="$HOME/Library/Developer/Xcode/DerivedData"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$NATIVE_DERIVED_DATA_ROOT/DeviceHub}"
 DERIVED_DATA_EXTERNAL_ROOT="/Volumes/RunnerCache/DerivedData/javi"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -46,18 +47,9 @@ if [[ -n "$APPLE_API_KEY_JSON" && ! -f "$APPLE_API_KEY_JSON" ]]; then
   echo "App Store Connect API key JSON is missing: $APPLE_API_KEY_JSON" >&2
   exit 1
 fi
-if [[ ! -d /Volumes/RunnerCache ]]; then
-  echo "RunnerCache must be mounted before a Device Hub release." >&2
-  exit 1
-fi
-RUNNERCACHE_MOUNT="$(df -P /Volumes/RunnerCache | awk 'NR == 2 {print $NF}')"
-if [[ "$RUNNERCACHE_MOUNT" != "/Volumes/RunnerCache" ]]; then
-  echo "RunnerCache is not mounted at /Volumes/RunnerCache." >&2
-  exit 1
-fi
 case "$DERIVED_DATA_PATH" in
-  "$HOME/Library/Developer/Xcode/DerivedData"|\
-  "$HOME/Library/Developer/Xcode/DerivedData/"*|\
+  "$NATIVE_DERIVED_DATA_ROOT"|\
+  "$NATIVE_DERIVED_DATA_ROOT/"*|\
   "$DERIVED_DATA_EXTERNAL_ROOT"|\
   "$DERIVED_DATA_EXTERNAL_ROOT/"*) ;;
   *)
@@ -65,22 +57,33 @@ case "$DERIVED_DATA_PATH" in
     exit 1
     ;;
 esac
+case "$DERIVED_DATA_PATH" in
+  "$DERIVED_DATA_EXTERNAL_ROOT"|"$DERIVED_DATA_EXTERNAL_ROOT/"*)
+    if [[ ! -d /Volumes/RunnerCache ]] || \
+      [[ "$(df -P /Volumes/RunnerCache | awk 'NR == 2 {print $NF}')" != "/Volumes/RunnerCache" ]]; then
+      echo "RunnerCache must be mounted before using its DerivedData path." >&2
+      exit 1
+    fi
+    ;;
+esac
 if [[ ! -d "$DERIVED_DATA_PATH" ]]; then
   mkdir -p "$DERIVED_DATA_PATH"
 fi
 DERIVED_DATA_REALPATH="$(cd "$DERIVED_DATA_PATH" && pwd -P)"
 case "$DERIVED_DATA_REALPATH" in
-  "$DERIVED_DATA_EXTERNAL_ROOT"|"$DERIVED_DATA_EXTERNAL_ROOT/"*) ;;
+  "$NATIVE_DERIVED_DATA_ROOT"|"$NATIVE_DERIVED_DATA_ROOT/"*) ;;
+  "$DERIVED_DATA_EXTERNAL_ROOT"|"$DERIVED_DATA_EXTERNAL_ROOT/"*)
+    DERIVED_DATA_MOUNT="$(df -P "$DERIVED_DATA_REALPATH" | awk 'NR == 2 {print $NF}')"
+    if [[ "$DERIVED_DATA_MOUNT" != "/Volumes/RunnerCache" ]]; then
+      echo "DerivedData is not on the mounted RunnerCache volume: $DERIVED_DATA_REALPATH" >&2
+      exit 1
+    fi
+    ;;
   *)
-    echo "DerivedData must resolve to RunnerCache: $DERIVED_DATA_REALPATH" >&2
+    echo "DerivedData resolves outside an approved build location: $DERIVED_DATA_REALPATH" >&2
     exit 1
     ;;
 esac
-DERIVED_DATA_MOUNT="$(df -P "$DERIVED_DATA_REALPATH" | awk 'NR == 2 {print $NF}')"
-if [[ "$DERIVED_DATA_MOUNT" != "/Volumes/RunnerCache" ]]; then
-  echo "DerivedData is not on RunnerCache: $DERIVED_DATA_REALPATH" >&2
-  exit 1
-fi
 EVIDENCE_ROOT="$DERIVED_DATA_REALPATH/DeviceHubRelease/$STAMP"
 ARCHIVE_LOG="$EVIDENCE_ROOT/archive.log"
 ARCHIVE_RESULT_BUNDLE="$EVIDENCE_ROOT/archive.xcresult"
@@ -90,10 +93,10 @@ EXPORT_LOG="$EVIDENCE_ROOT/export.log"
 source "$SHARED_IOS_SUPPORT_DIR/scripts/release_build_settings.sh"
 # shellcheck source=/dev/null
 source "$SHARED_IOS_SUPPORT_DIR/scripts/adhoc_signing.sh"
+source "$ROOT/BuildSupport/check_xcode_toolchain.sh"
 export DEVELOPER_DIR
+devicehub_check_xcode_toolchain
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-ios_require_command xcbeautify
-XCBEAUTIFY_BIN="$(ios_resolve_command xcbeautify)"
 
 run_xcodebuild() {
   local action="${1:?action required}"
@@ -101,39 +104,20 @@ run_xcodebuild() {
   local result_bundle="${3:-}"
   shift 3
 
-  local -a statuses
-  if "$@" 2>&1 | tee "$raw_log" | "$XCBEAUTIFY_BIN" --is-ci --disable-logging; then
-    statuses=("${PIPESTATUS[@]}")
+  if python3 "$SHARED_IOS_SUPPORT_DIR/scripts/run_logged.py" \
+    --log "$raw_log" \
+    --label "devicehub-$action" \
+    --timeout 3600 \
+    -- "$@"; then
+    if [[ -n "$result_bundle" ]]; then
+      printf 'Result bundle: %s\n' "$result_bundle" >&2
+    fi
   else
-    statuses=("${PIPESTATUS[@]}")
-  fi
-
-  if (( statuses[0] != 0 )); then
-    printf 'XCODEBUILD_FAILED action=%s xcodebuild_exit=%s tee_exit=%s formatter_exit=%s raw_log=%s' \
-      "$action" "${statuses[0]}" "${statuses[1]}" "${statuses[2]}" "$raw_log" >&2
+    local status=$?
     if [[ -n "$result_bundle" ]]; then
-      printf ' result_bundle=%s' "$result_bundle" >&2
+      printf 'Result bundle: %s\n' "$result_bundle" >&2
     fi
-    printf '\n' >&2
-    return "${statuses[0]}"
-  fi
-  if (( statuses[1] != 0 )); then
-    printf 'XCODEBUILD_OUTPUT_FAILED action=%s tee_exit=%s raw_log=%s' \
-      "$action" "${statuses[1]}" "$raw_log" >&2
-    if [[ -n "$result_bundle" ]]; then
-      printf ' result_bundle=%s' "$result_bundle" >&2
-    fi
-    printf '\n' >&2
-    return "${statuses[1]}"
-  fi
-  if (( statuses[2] != 0 )); then
-    printf 'XCODEBUILD_FORMAT_FAILED action=%s formatter_exit=%s raw_log=%s' \
-      "$action" "${statuses[2]}" "$raw_log" >&2
-    if [[ -n "$result_bundle" ]]; then
-      printf ' result_bundle=%s' "$result_bundle" >&2
-    fi
-    printf '\n' >&2
-    return "${statuses[2]}"
+    return "$status"
   fi
   if [[ -n "$result_bundle" && ! -d "$result_bundle" ]]; then
     printf 'XCODEBUILD_RESULT_MISSING action=%s result_bundle=%s raw_log=%s\n' \

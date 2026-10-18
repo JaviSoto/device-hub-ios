@@ -6,6 +6,8 @@ PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 # shellcheck source=BuildSupport/process_guard.sh
 source "$PROCESS_GUARD"
 devicehub_require_guard lint-dead-code 1800 "$0" "$@"
+# shellcheck source=BuildSupport/check_xcode_toolchain.sh
+source "$ROOT/BuildSupport/check_xcode_toolchain.sh"
 
 # shellcheck source=BuildSupport/xcodebuild_test_output.sh
 source "$ROOT/BuildSupport/xcodebuild_test_output.sh"
@@ -18,6 +20,7 @@ if [[ ! -d "$DEVELOPER_DIR" ]]; then
 fi
 INDEXSTORE_LIBRARY_DIR="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/lib"
 export DEVELOPER_DIR
+devicehub_check_xcode_toolchain
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 if [[ -n "${DYLD_LIBRARY_PATH:-}" ]]; then
   export DYLD_LIBRARY_PATH="$INDEXSTORE_LIBRARY_DIR:$DYLD_LIBRARY_PATH"
@@ -35,11 +38,11 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 APP_EVIDENCE_ROOT="$DERIVED_DATA_PATH/TestEvidence/Periphery"
 # Periphery always supplies its own -derivedDataPath when it builds. Build the
 # index explicitly so both the compiler cache and evidence keep their owner.
-devicehub_run_xcodebuild_test \
+devicehub_run_xcodebuild \
   devicehub-app-index \
   "$APP_EVIDENCE_ROOT/devicehub-app-index-$RUN_ID.log" \
   "$APP_EVIDENCE_ROOT/devicehub-app-index-$RUN_ID.xcresult" \
-  "${XCBEAUTIFY_COMMAND:-xcbeautify}" \
+  1680 \
   /usr/bin/xcodebuild build-for-testing \
   -project "$ROOT/DeviceHub.xcodeproj" \
   -scheme DeviceHub \
@@ -66,39 +69,26 @@ periphery scan \
 PACKAGE_ROOT="$ROOT/Packages/DeviceHubKit"
 PACKAGE_DERIVED_DATA="$DERIVED_DATA_PATH/Periphery/DeviceHubKit"
 PACKAGE_BUILD_LOG="$DERIVED_DATA_PATH/TestEvidence/Periphery/devicehub-kit-build-for-testing-$RUN_ID.log"
+PACKAGE_BUILD_RESULT_BUNDLE="${PACKAGE_BUILD_LOG%.log}.xcresult"
 mkdir -p "$PACKAGE_DERIVED_DATA" "$(dirname "$PACKAGE_BUILD_LOG")"
 
-local_statuses=()
-if (
+(
   cd "$PACKAGE_ROOT"
-  /usr/bin/xcodebuild \
-    -quiet \
+  devicehub_run_xcodebuild \
+    devicehub-kit-index \
+    "$PACKAGE_BUILD_LOG" \
+    "$PACKAGE_BUILD_RESULT_BUNDLE" \
+    1680 \
+    /usr/bin/xcodebuild build-for-testing \
     -jobs 4 \
     -scheme DeviceHubKit-Package \
     -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath "$PACKAGE_DERIVED_DATA" \
     -clonedSourcePackagesDirPath "$PACKAGE_DERIVED_DATA/SourcePackages" \
     -skipMacroValidation \
-    build-for-testing \
     ONLY_ACTIVE_ARCH=YES \
     CODE_SIGNING_ALLOWED=NO
-  ) 2>&1 | tee "$PACKAGE_BUILD_LOG"; then
-  local_statuses=("${PIPESTATUS[@]}")
-else
-  local_statuses=("${PIPESTATUS[@]}")
-fi
-if (( local_statuses[0] != 0 )); then
-  printf 'PERIPHERY_BUILD_FAILED xcodebuild_exit=%s tee_exit=%s raw_log=%s\n' \
-    "${local_statuses[0]}" "${local_statuses[1]}" "$PACKAGE_BUILD_LOG" >&2
-  exit "${local_statuses[0]}"
-fi
-if (( local_statuses[1] != 0 )); then
-  printf 'PERIPHERY_BUILD_OUTPUT_FAILED tee_exit=%s raw_log=%s\n' \
-    "${local_statuses[1]}" "$PACKAGE_BUILD_LOG" >&2
-  exit "${local_statuses[1]}"
-fi
-printf 'PERIPHERY_BUILD_OK raw_log=%s derived_data=%s\n' \
-  "$PACKAGE_BUILD_LOG" "$PACKAGE_DERIVED_DATA" >&2
+)
 PACKAGE_INDEX_STORE="$PACKAGE_DERIVED_DATA/Index.noindex/DataStore"
 periphery scan \
   --project-root "$PACKAGE_ROOT" \

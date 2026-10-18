@@ -18,7 +18,6 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 EVIDENCE_ROOT="${DEVICE_HUB_TEST_EVIDENCE_DIR:-$DERIVED_DATA_PATH/TestEvidence/DeviceHub/$RUN_ID}"
 ACCESSIBILITY_JSON="$RUN_ROOT/accessibility.json"
 RECORD_SNAPSHOTS="${DEVICE_HUB_RECORD_SNAPSHOTS:-0}"
-XCBEAUTIFY_COMMAND="${XCBEAUTIFY_COMMAND:-xcbeautify}"
 
 # Invoked by the EXIT trap below.
 # shellcheck disable=SC2329
@@ -41,11 +40,6 @@ DESTINATION="generic/platform=iOS Simulator" \
 CODE_SIGNING_ALLOWED=YES \
 DERIVED_DATA_PATH="$DERIVED_DATA_PATH" \
   Scripts/build-app.sh
-
-if ! command -v "$XCBEAUTIFY_COMMAND" >/dev/null 2>&1; then
-  printf 'Required test formatter is unavailable: %s\n' "$XCBEAUTIFY_COMMAND" >&2
-  exit 127
-fi
 
 REPOSITORY_ROOT="$(cd "$ROOT" && pwd -P)"
 if [[ "$EVIDENCE_ROOT" != /* ]]; then
@@ -76,7 +70,6 @@ Sources/DeviceHubPrivateMedia/Tests/run-tests.sh
 DESTINATION="platform=iOS Simulator,id=$SIMULATOR_UDID" \
 DERIVED_DATA_PATH="$DERIVED_DATA_PATH" \
 DEVICE_HUB_TEST_EVIDENCE_DIR="$EVIDENCE_ROOT" \
-XCBEAUTIFY_COMMAND="$XCBEAUTIFY_COMMAND" \
   Scripts/test-live-ios.sh
 
 run_ui_snapshot_tests() {
@@ -98,11 +91,11 @@ run_ui_snapshot_tests() {
   fi
   (
     cd "$ROOT/Packages/DeviceHubKit"
-    if devicehub_run_xcodebuild_test \
+    if devicehub_run_xcodebuild \
         "devicehub-ui-snapshot-$pass_name" \
         "$raw_log" \
         "$result_bundle" \
-        "$XCBEAUTIFY_COMMAND" \
+        1600 \
         /usr/bin/xcodebuild \
         test \
         -scheme DeviceHubKit-Package \

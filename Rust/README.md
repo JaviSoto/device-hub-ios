@@ -181,8 +181,8 @@ The build creates:
 Rust/Artifacts/DeviceHubFFI.xcframework
 ```
 
-It contains arm64 iPhoneOS 27 and arm64 iOS Simulator 27 slices, both with a
-27.0 minimum deployment target. Verification compares packaged headers to the
+It contains arm64 iPhoneOS 27.1 and arm64 iOS Simulator 27.1 slices, both with
+a 27.1 minimum deployment target. Verification compares packaged headers to the
 reviewed source, links the public C smoke consumer against both slices, and
 checks each Mach-O platform and minimum OS.
 

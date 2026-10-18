@@ -47,9 +47,11 @@ underlying simulator's display scale.
 Native XCTest and snapshot runs keep one raw log and `.xcresult` per pass under
 `DERIVED_DATA_PATH/TestEvidence/DeviceHub` by default. Set
 `DEVICE_HUB_TEST_EVIDENCE_DIR` to an absolute caller-owned evidence folder
-outside the repository instead.
-The test stream is formatted with `xcbeautify --is-ci`, which keeps the Swift
-Testing summary visible; the original `xcodebuild` exit code is preserved.
+outside the repository instead. The shared runner prints a compact status,
+elapsed time, and artifact paths; failures include a bounded diagnostic excerpt
+while the full log and result bundle stay in that evidence folder. Swift
+package, Rust, protocol, and app-build logs stay under
+`DERIVED_DATA_PATH/RunOutputs`.
 `test-app` reuses one `DERIVED_DATA_PATH` for preflight, live tests, snapshots,
 and the final app build. Dead-code analysis keeps its package index under that
 root's `Periphery/DeviceHubKit` child.
@@ -127,7 +129,10 @@ comparison mode so stale or incomplete references cannot pass silently.
 App integration also launches the simulator-only live fixture and checks its
 actual accessibility tree: Home, Lock, Keyboard, and Rotate must be absent
 from the canvas and present after opening More Controls. These checks use the
-production navigation root and never connect to a real device.
+production navigation root and never connect to a real device. Its session
+event and frame streams stay open until the app disconnects; a completed event
+stream means the remote session ended. The fixture's Settings-like display is
+mock service data, not a screenshot from a physical device.
 
 ## Authorized-device verification
 

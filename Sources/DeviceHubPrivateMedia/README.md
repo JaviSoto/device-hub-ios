@@ -39,8 +39,8 @@ Sources/DeviceHubPrivateMedia/Tests/run-tests.sh
 ```
 
 It runs the synthetic mode-5 negotiation and lifecycle suite on macOS, compiles
-and links the production boundary for iPhoneOS 27 with warnings as errors, and
-runs a non-streaming iOS 27 Simulator probe. Simulator lacks AVConference's
+and links the production boundary for iPhoneOS 27.1 with warnings as errors, and
+runs a non-streaming iOS 27.1 Simulator probe. Simulator lacks AVConference's
 video rule collection and currently rejects mode-5 initialization with
 `GKVoiceChatServiceErrorDomain` code `32032`; that limitation passes only when
 the framework ABI is valid and the exact known error, operation, and code match.

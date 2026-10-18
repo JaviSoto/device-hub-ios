@@ -6,6 +6,8 @@ PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 # shellcheck source=BuildSupport/process_guard.sh
 source "$PROCESS_GUARD"
 devicehub_require_guard test-live-ios 1200 "$0" "$@"
+# shellcheck source=BuildSupport/check_xcode_toolchain.sh
+source "$ROOT/BuildSupport/check_xcode_toolchain.sh"
 
 # shellcheck source=BuildSupport/xcodebuild_test_output.sh
 source "$ROOT/BuildSupport/xcodebuild_test_output.sh"
@@ -16,7 +18,6 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 EVIDENCE_ROOT="${DEVICE_HUB_TEST_EVIDENCE_DIR:-$DERIVED_DATA_PATH/TestEvidence/DeviceHub/$RUN_ID}"
 XCODEGEN_COMMAND="${XCODEGEN_COMMAND:-xcodegen}"
 XCODEBUILD_COMMAND="${XCODEBUILD_COMMAND:-/usr/bin/xcodebuild}"
-XCBEAUTIFY_COMMAND="${XCBEAUTIFY_COMMAND:-xcbeautify}"
 
 case "$DESTINATION" in
   "platform=iOS Simulator,"*) ;;
@@ -32,11 +33,7 @@ if [[ ! -d "$DEVELOPER_DIR" ]]; then
   exit 1
 fi
 export DEVELOPER_DIR
-
-if ! command -v "$XCBEAUTIFY_COMMAND" >/dev/null 2>&1; then
-  printf 'Required test formatter is unavailable: %s\n' "$XCBEAUTIFY_COMMAND" >&2
-  exit 127
-fi
+devicehub_check_xcode_toolchain
 
 cd "$ROOT"
 REPOSITORY_ROOT="$(cd "$ROOT" && pwd -P)"
@@ -64,11 +61,11 @@ printf 'Test evidence: %s\n' "$EVIDENCE_ROOT"
 
 "$XCODEGEN_COMMAND" generate
 set +e
-devicehub_run_xcodebuild_test \
+devicehub_run_xcodebuild \
   devicehub-live-tests \
   "$RAW_LOG" \
   "$RESULT_BUNDLE" \
-  "$XCBEAUTIFY_COMMAND" \
+  1080 \
   "$XCODEBUILD_COMMAND" \
   test \
   -project "$ROOT/DeviceHub.xcodeproj" \

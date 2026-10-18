@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+devicehub_check_xcode_toolchain() {
+  local shared_support="${SHARED_IOS_SUPPORT_DIR:-$HOME/code/ios-build-support}"
+  local checker="$shared_support/scripts/check_xcode_toolchain.py"
+  if [[ ! -r "$checker" ]]; then
+    printf 'Missing shared Xcode toolchain check: %s\n' "$checker" >&2
+    return 1
+  fi
+  python3 "$checker" --minimum-xcode 27.1 --minimum-ios-sdk 27.1
+}

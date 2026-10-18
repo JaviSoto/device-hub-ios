@@ -141,7 +141,7 @@ def simulator_inventory(run_command: CommandRunner) -> tuple[SimulatorDevice, ..
 
 
 def runtime_identifier(run_command: CommandRunner) -> str:
-    """Select the newest available iOS 27 runtime deterministically."""
+    """Select the newest available iOS 27.1+ runtime deterministically."""
 
     payload = json_command(
         run_command,
@@ -149,23 +149,27 @@ def runtime_identifier(run_command: CommandRunner) -> str:
     )
     if not isinstance(payload, dict) or not isinstance(payload.get("runtimes"), list):
         raise SimulatorSetupError("simctl runtime inventory is malformed")
-    candidates = tuple(
-        runtime["identifier"]
-        for runtime in payload["runtimes"]
-        if isinstance(runtime, dict)
-        and runtime.get("isAvailable") is True
-        and isinstance(runtime.get("identifier"), str)
-        and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-27-")
-    )
+    candidates: list[tuple[tuple[int, ...], str]] = []
+    prefix = "com.apple.CoreSimulator.SimRuntime.iOS-"
+    for runtime in payload["runtimes"]:
+        if (
+            not isinstance(runtime, dict)
+            or runtime.get("isAvailable") is not True
+            or not isinstance(runtime.get("identifier"), str)
+        ):
+            continue
+        identifier = runtime["identifier"]
+        if not identifier.startswith(prefix):
+            continue
+        version_components = identifier.removeprefix(prefix).split("-")
+        if not all(component.isdecimal() for component in version_components):
+            continue
+        version = tuple(int(component) for component in version_components)
+        if version[0] == 27 and version >= (27, 1):
+            candidates.append((version, identifier))
     if not candidates:
-        raise SimulatorSetupError("no available iOS 27 simulator runtime")
-    return max(
-        candidates,
-        key=lambda identifier: tuple(
-            int(component)
-            for component in identifier.rsplit("iOS-", maxsplit=1)[-1].split("-")
-        ),
-    )
+        raise SimulatorSetupError("no available iOS 27.1 or later simulator runtime")
+    return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
 def device_type_identifier(
