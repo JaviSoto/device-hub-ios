@@ -48,7 +48,7 @@ struct RemoteSessionMenu: View {
 
             Section("Devices") {
                 if !devices.isEmpty {
-                    Menu("Choose Device", systemImage: "iphone.and.ipad") {
+                    Menu("Choose Device", systemImage: "ipad.and.iphone") {
                         ForEach(devices) { device in
                             Button {
                                 deviceSelected(device.id)
