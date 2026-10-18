@@ -32,7 +32,8 @@ class ProjectLinkageTests(unittest.TestCase):
     def test_ios_runtime_version_guard_checks_numeric_versions(self) -> None:
         helper = REPOSITORY_ROOT / "BuildSupport/check_xcode_toolchain.sh"
         for version, expected in (
-            ("27.0", False),
+            ("26.9", False),
+            ("27.0", True),
             ("27.1", True),
             ("27.2", True),
             ("28.0", True),
@@ -44,7 +45,7 @@ class ProjectLinkageTests(unittest.TestCase):
                     [
                         "bash",
                         "-c",
-                        'source "$1"; is_ios_271_or_later "$2"',
+                        'source "$1"; is_ios_270_or_later "$2"',
                         "bash",
                         str(helper),
                         version,
@@ -55,7 +56,7 @@ class ProjectLinkageTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode == 0, expected, result.stderr)
 
-    def test_ios_deployment_floor_is_271_across_app_and_native_inputs(self) -> None:
+    def test_ios_deployment_floor_is_270_and_sdk_stays_271(self) -> None:
         project = PROJECT_SPECIFICATION.read_text(encoding="utf-8")
         package = (REPOSITORY_ROOT / "Packages/DeviceHubKit/Package.swift").read_text(
             encoding="utf-8"
@@ -73,27 +74,40 @@ class ProjectLinkageTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertTrue('iOS: "27.1"' in project, "XcodeGen must set iOS to 27.1")
+        self.assertTrue('iOS: "27.0"' in project, "XcodeGen must set iOS to 27.0")
         self.assertTrue(
             'xcodeVersion: "27.1"' in project,
             "XcodeGen metadata must require the Xcode 27.1 toolchain",
         )
         self.assertTrue(
-            'IPHONEOS_DEPLOYMENT_TARGET: "27.1"' in project,
-            "the app build setting must set iOS to 27.1",
+            'IPHONEOS_DEPLOYMENT_TARGET: "27.0"' in project,
+            "the app build setting must set iOS to 27.0",
         )
         self.assertTrue(
-            '.iOS("27.1")' in package,
-            "SwiftPM must set the iOS platform to 27.1",
+            '.iOS("27.0")' in package,
+            "SwiftPM must set the iOS platform to 27.0",
         )
         self.assertTrue(
-            'readonly DEPLOYMENT_TARGET="27.1"' in build_xcframework,
-            "the Rust XCFramework slices must target iOS 27.1",
+            'readonly DEPLOYMENT_TARGET="27.0"' in build_xcframework,
+            "the Rust XCFramework slices must target iOS 27.0",
+        )
+        self.assertIn(
+            'readonly BUILD_ROOT="$REPOSITORY_ROOT/Rust/.build/cargo-ios-$DEPLOYMENT_TARGET"',
+            build_xcframework,
+            "Rust objects must not reuse caches from a different deployment floor",
         )
         self.assertIn(
             "devicehub_check_xcode_toolchain",
             build_xcframework,
             "the Rust XCFramework build must use the shared Xcode and SDK check",
+        )
+        toolchain_check = (REPOSITORY_ROOT / "BuildSupport/check_xcode_toolchain.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "--minimum-xcode 27.1 --minimum-ios-sdk 27.1",
+            toolchain_check,
+            "build tools must keep requiring the Xcode 27.1 toolchain and SDK",
         )
         for build_entry in (
             "Scripts/build-app.sh",
@@ -109,20 +123,25 @@ class ProjectLinkageTests(unittest.TestCase):
                 f"{build_entry} must enforce the shared Xcode and SDK floor",
             )
         self.assertTrue(
-            'readonly EXPECTED_MINIMUM="27.1"' in verify_xcframework,
-            "the XCFramework verifier must require iOS 27.1",
+            'readonly EXPECTED_MINIMUM="27.0"' in verify_xcframework,
+            "the XCFramework verifier must require iOS 27.0",
+        )
+        self.assertIn(
+            "-Wl,-fatal_warnings",
+            verify_xcframework,
+            "the XCFramework verifier must reject object files built for a newer OS",
         )
         self.assertTrue(
-            "-target arm64-apple-ios27.1" in private_media_tests,
-            "the device probe must target iOS 27.1",
+            "-target arm64-apple-ios27.0" in private_media_tests,
+            "the device probe must target iOS 27.0",
         )
         self.assertTrue(
-            "-target \"$simulator_arch-apple-ios27.1-simulator\"" in private_media_tests,
-            "the simulator probe must target iOS 27.1",
+            "-target \"$simulator_arch-apple-ios27.0-simulator\"" in private_media_tests,
+            "the simulator probe must target iOS 27.0",
         )
         self.assertTrue(
-            "<string>27.1</string>" in probe_info,
-            "the probe bundle must declare iOS 27.1 as its minimum",
+            "<string>27.0</string>" in probe_info,
+            "the probe bundle must declare iOS 27.0 as its minimum",
         )
 
     def test_app_bundles_the_third_party_notices(self) -> None:

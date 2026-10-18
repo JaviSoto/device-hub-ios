@@ -12,7 +12,7 @@ source "$ROOT/BuildSupport/signing_keychain.sh"
 devicehub_require_guard archive-app 1800 "$0" "$@"
 
 ARCHIVE_PATH="${ARCHIVE_PATH:-$ROOT/build/DeviceHub.xcarchive}"
-DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$ROOT/DerivedData}"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
 CODE_SIGNING_ALLOWED="${CODE_SIGNING_ALLOWED:-YES}"
 SIGNING_KEYCHAIN_PATH="${SIGNING_KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}"
 ALLOW_PROVISIONING_UPDATES="${ALLOW_PROVISIONING_UPDATES:-0}"

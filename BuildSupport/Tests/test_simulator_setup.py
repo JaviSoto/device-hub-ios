@@ -190,7 +190,7 @@ class SimulatorSetupTests(unittest.TestCase):
         runner = FakeCommandRunner(
             runtimes=[
                 {
-                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-9",
                     "isAvailable": True,
                 }
             ]
@@ -198,9 +198,107 @@ class SimulatorSetupTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             simulator_setup.SimulatorSetupError,
-            "no available iOS 27.1 or later simulator runtime",
+            "no available iOS 27.0 or later simulator runtime",
         ):
             simulator_setup.select_runtime(runner)
+
+        self.assertEqual(runner.created_device_types, [])
+
+    def test_selects_explicit_270_runtime_for_a_supported_phone(self) -> None:
+        runner = FakeCommandRunner(
+            runtimes=[
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
+                },
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
+                        }
+                    ],
+                },
+            ]
+        )
+
+        simulator_setup.prepare_task_simulator(
+            task_name="device-hub-ios-270",
+            device_type_name="iPhone 17 Pro",
+            runtime_version="27.0",
+            run_command=runner,
+        )
+
+        create_command = next(
+            call for call, _check in runner.calls if call[1:3] == ("simctl", "create")
+        )
+        self.assertEqual(
+            create_command[4:],
+            (
+                "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+            ),
+        )
+
+        arguments = simulator_setup.parse_arguments(
+            [
+                "prepare",
+                "--name",
+                "device-hub-ios-270",
+                "--runtime-version",
+                "27.0",
+                "--device-type",
+                "iPhone 17 Pro",
+            ]
+        )
+        self.assertEqual(arguments.runtime_version, "27.0")
+        self.assertEqual(arguments.device_type, "iPhone 17 Pro")
+
+    def test_explicit_runtime_must_exist_and_support_the_requested_device_type(self) -> None:
+        runner = FakeCommandRunner()
+
+        with self.assertRaisesRegex(
+            simulator_setup.SimulatorSetupError,
+            "no available iOS 27.0 simulator runtime",
+        ):
+            simulator_setup.prepare_task_simulator(
+                task_name="device-hub-ios-270",
+                device_type_name="iPhone 17 Pro",
+                runtime_version="27.0",
+                run_command=runner,
+            )
+
+        self.assertEqual(runner.created_device_types, [])
+
+        runner = FakeCommandRunner(
+            runtimes=[
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
+                }
+            ]
+        )
+        with self.assertRaisesRegex(
+            simulator_setup.SimulatorSetupError,
+            "not supported by the selected iOS runtime",
+        ):
+            simulator_setup.prepare_task_simulator(
+                task_name="device-hub-ios-270",
+                device_type_name="iPhone Duo",
+                runtime_version="27.0",
+                run_command=runner,
+            )
 
         self.assertEqual(runner.created_device_types, [])
 

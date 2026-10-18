@@ -70,6 +70,18 @@ python3 BuildSupport/simulator_setup.py validate-task --udid "$UDID" --name "$SI
 python3 BuildSupport/simulator_setup.py cleanup --udid "$UDID" --name "$SIM_NAME"
 ```
 
+The default is the newest installed iOS 27.0-or-later runtime. To test the
+stable floor explicitly, add `--runtime-version 27.0` and choose a phone or
+iPad listed as supported by that runtime, for example:
+
+```sh
+python3 BuildSupport/simulator_setup.py prepare --name device-hub-ios-270 \
+  --runtime-version 27.0 --device-type 'iPhone 17 Pro'
+```
+
+The helper checks Xcode's supported-device metadata before creating the exact
+runtime/model pair. The iPhone Duo remains a 27.1 runtime device.
+
 Cleanup restores and verifies stock simulator services through SimSlim before
 shutting down and deleting only that exact task-owned UDID. If a run is
 interrupted or cleanup cannot be proven, inspect that device's exact identity

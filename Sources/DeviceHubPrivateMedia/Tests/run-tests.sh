@@ -82,12 +82,12 @@ xcrun --sdk macosx clang++ \
   -o "$work_dir/DeviceHubPrivateMediaTests"
 "$work_dir/DeviceHubPrivateMediaTests"
 
-printf 'Compiling and linking the iPhoneOS 27.1 probe with warnings as errors...\n'
+printf 'Compiling and linking the iPhoneOS 27.0 probe with warnings as errors...\n'
 iphoneos_sdk=$(xcrun --sdk iphoneos --show-sdk-path)
 xcrun --sdk iphoneos clang++ \
   "${common_flags[@]}" \
   -framework UIKit \
-  -target arm64-apple-ios27.1 \
+  -target arm64-apple-ios27.0 \
   -isysroot "$iphoneos_sdk" \
   "${common_sources[@]}" \
   "$module_dir/Probe/main.mm" \
@@ -109,7 +109,7 @@ cp "$module_dir/Probe/Info.plist" "$probe_app/Info.plist"
 xcrun --sdk iphonesimulator clang++ \
   "${common_flags[@]}" \
   -framework UIKit \
-  -target "$simulator_arch-apple-ios27.1-simulator" \
+  -target "$simulator_arch-apple-ios27.0-simulator" \
   -isysroot "$simulator_sdk" \
   "${common_sources[@]}" \
   "$module_dir/Probe/main.mm" \
@@ -122,12 +122,12 @@ simulator_udid=${DEVICE_HUB_SIMULATOR_UDID:?simulator setup did not provide a UD
 simulator_runtime_version=$(
   xcrun simctl getenv "$simulator_udid" SIMULATOR_RUNTIME_VERSION
 )
-if ! is_ios_271_or_later "$simulator_runtime_version"; then
-  printf 'Expected an iOS 27.1 or later simulator, found %s (%s).\n' \
+if ! is_ios_270_or_later "$simulator_runtime_version"; then
+  printf 'Expected an iOS 27.0 or later simulator, found %s (%s).\n' \
     "$simulator_runtime_version" "$simulator_udid" >&2
   exit 1
 fi
-printf 'Running the fail-closed iOS 27.1 Simulator runtime probe...\n'
+printf 'Running the fail-closed iOS 27.0 Simulator runtime probe...\n'
 
 probe_home="$work_dir/probe-home"
 mkdir -p "$probe_home/Documents"

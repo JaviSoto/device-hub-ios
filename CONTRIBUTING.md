@@ -7,8 +7,9 @@ about the layer they own.
 ## Development setup
 
 Development requires macOS with Xcode 27.1 or later and the iOS 27.1 SDK or
-later. The repository uses [mise](https://mise.jdx.dev/) to install the
-remaining tools and expose the supported workflows.
+later. The app supports iOS and iPadOS 27.0 or later. The repository uses
+[mise](https://mise.jdx.dev/) to install the remaining tools and expose the
+supported workflows.
 
 ```sh
 mise install

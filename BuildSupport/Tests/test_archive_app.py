@@ -10,6 +10,17 @@ SIGNING_HELPER = ROOT / "BuildSupport" / "signing_keychain.sh"
 
 
 class ArchiveAppContractTests(unittest.TestCase):
+    def test_build_and_archive_default_to_standard_derived_data(self) -> None:
+        for script in (BUILD_SCRIPT, ARCHIVE_SCRIPT):
+            with self.subTest(script=script.name):
+                contents = script.read_text(encoding="utf-8")
+
+                self.assertIn(
+                    'DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"',
+                    contents,
+                )
+                self.assertNotIn("$ROOT/DerivedData", contents)
+
     def test_archive_supports_explicit_unsigned_validation(self) -> None:
         contents = ARCHIVE_SCRIPT.read_text()
 

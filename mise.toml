@@ -127,6 +127,8 @@ run = [
 ]
 sources = [
   "BuildSupport/bootstrap_idevice.py",
+  "Scripts/build-protocol-xcframework.sh",
+  "Scripts/verify-protocol-xcframework.sh",
   "Rust/Cargo.lock",
   "Rust/Cargo.toml",
   "Rust/DeviceHubFFI/**/*.rs",

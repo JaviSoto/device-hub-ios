@@ -181,12 +181,14 @@ The build creates:
 Rust/Artifacts/DeviceHubFFI.xcframework
 ```
 
-It contains arm64 iPhoneOS 27.1 and arm64 iOS Simulator 27.1 slices, both with
-a 27.1 minimum deployment target. Verification compares packaged headers to the
+It contains arm64 iPhoneOS 27.0 and arm64 iOS Simulator 27.0 slices, both with
+a 27.0 minimum deployment target. Verification compares packaged headers to the
 reviewed source, links the public C smoke consumer against both slices, and
 checks each Mach-O platform and minimum OS.
 
-The wrapper pins upstream `idevice` revision
+The Rust target directory is keyed by deployment floor under
+`Rust/.build/cargo-ios-<minimum>` so Cargo cannot reuse object files built for
+a newer iOS version. The wrapper pins upstream `idevice` revision
 `a64b8867815b3da17b5c927531bdba877e8456ef` with only the reviewed
 `ring`, `remote_pairing`, `tunnel_tcp_stack`, `display_stream`, and
 `mobile_image_mounter` features.

@@ -24,6 +24,7 @@ IDENTIFIER_PATTERN = re.compile(
 )
 TASK_NAME_PATTERN = re.compile(r"[^A-Za-z0-9_-]+")
 TASK_MARKER = " - Codex "
+MINIMUM_IOS_RUNTIME = (27, 0)
 CommandRunner = Callable[[tuple[str, ...], bool], str]
 SimSlimConfiguration = tuple[str, Path]
 
@@ -148,8 +149,17 @@ def simulator_inventory(run_command: CommandRunner) -> tuple[SimulatorDevice, ..
     return tuple(devices)
 
 
-def select_runtime(run_command: CommandRunner) -> SimulatorRuntime:
-    """Select the newest iOS 27.1+ runtime and its supported device types."""
+def select_runtime(
+    run_command: CommandRunner,
+    requested_version: str | None = None,
+) -> SimulatorRuntime:
+    """Select an installed iOS 27.0+ runtime and its supported device types."""
+
+    requested_components: tuple[int, ...] | None = None
+    if requested_version is not None:
+        if re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", requested_version) is None:
+            raise SimulatorSetupError("requested iOS simulator runtime version is invalid")
+        requested_components = tuple(int(component) for component in requested_version.split("."))
 
     payload = json_command(
         run_command,
@@ -173,10 +183,16 @@ def select_runtime(run_command: CommandRunner) -> SimulatorRuntime:
         if not all(component.isdecimal() for component in version_components):
             continue
         version = tuple(int(component) for component in version_components)
-        if version[0] == 27 and version >= (27, 1):
+        if version >= MINIMUM_IOS_RUNTIME and (
+            requested_components is None or version == requested_components
+        ):
             candidates.append((version, identifier))
     if not candidates:
-        raise SimulatorSetupError("no available iOS 27.1 or later simulator runtime")
+        if requested_version is not None:
+            raise SimulatorSetupError(
+                f"no available iOS {requested_version} simulator runtime"
+            )
+        raise SimulatorSetupError("no available iOS 27.0 or later simulator runtime")
     selected_identifier = max(candidates, key=lambda candidate: candidate[0])[1]
     selected_runtime = next(
         runtime
@@ -289,11 +305,12 @@ def create_task_simulator(
     task_name: str,
     run_command: CommandRunner,
     device_type_name: str | None = None,
+    runtime_version: str | None = None,
 ) -> PreparedSimulator:
     """Create and verify one fresh simulator rather than borrowing a device."""
 
     name = task_simulator_name(task_name)
-    runtime = select_runtime(run_command)
+    runtime = select_runtime(run_command, requested_version=runtime_version)
     identifier = validate_identifier(
         run_command(
             (
@@ -429,6 +446,7 @@ def prepare_task_simulator(
     task_name: str,
     run_command: CommandRunner = subprocess_command,
     device_type_name: str | None = None,
+    runtime_version: str | None = None,
 ) -> PreparedSimulator:
     """Create and boot one exact task-owned simulator after build preflight."""
 
@@ -437,6 +455,7 @@ def prepare_task_simulator(
         task_name=task_name,
         run_command=run_command,
         device_type_name=device_type_name,
+        runtime_version=runtime_version,
     )
     try:
         if configuration is not None:
@@ -535,6 +554,7 @@ def parse_arguments(arguments: Sequence[str]) -> argparse.Namespace:
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--name", required=True)
     prepare.add_argument("--device-type")
+    prepare.add_argument("--runtime-version")
     validate = subparsers.add_parser("validate-task")
     validate.add_argument("--udid", required=True)
     validate.add_argument("--name", required=True)
@@ -553,6 +573,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             prepared = prepare_task_simulator(
                 task_name=namespace.name,
                 device_type_name=namespace.device_type,
+                runtime_version=namespace.runtime_version,
             )
             print(f"{prepared.identifier}\t1\t{prepared.name}")
         elif namespace.operation == "validate-task":

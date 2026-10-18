@@ -49,7 +49,7 @@ across a crash and promoted only after authenticated pair-verify succeeds; the
 app never discards an ambiguous record automatically.
 
 The remote-pairing wire advertisement remains `ver=26` and `minVer=17`. The
-iOS 27.1 deployment target is not substituted into that protocol field. The app
+iOS 27.0 deployment target is not substituted into that protocol field. The app
 never calls upstream per-attempt identity generators.
 
 The app never persists:

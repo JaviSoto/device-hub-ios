@@ -2,7 +2,7 @@
 
 ![Device Hub iOS running on iPad and controlling an iPhone](Docs/Images/device-hub-ipad.png)
 
-![iOS and iPadOS 27.1+](https://img.shields.io/badge/iOS%20%26%20iPadOS-27.1%2B-000000?logo=apple&logoColor=white)
+![iOS and iPadOS 27.0+](https://img.shields.io/badge/iOS%20%26%20iPadOS-27.0%2B-000000?logo=apple&logoColor=white)
 ![Swift 6.4](https://img.shields.io/badge/Swift-6.4-F05138?logo=swift&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
 
@@ -28,14 +28,15 @@ uses private, undocumented Apple interfaces.
 ## Requirements
 
 - macOS with Xcode 27.1 or later and the iOS 27.1 SDK or later
-- An iPhone or iPad running iOS or iPadOS 27.1 or later
+- An iPhone or iPad running iOS or iPadOS 27.0 or later
 - A compatible target device with Developer Mode enabled
 - An Apple development signing identity for device installation
 - Local-network connectivity between the controller and target
 
-Device Hub targets iOS and iPadOS 27.1 and is verified against the 27.1
-simulator runtime. Protocol compatibility remains separate from the app's
-deployment target.
+Device Hub targets iOS and iPadOS 27.0. The build still requires Xcode 27.1
+and its iOS 27.1 SDK; simulator checks can select the 27.0 stable runtime or
+the 27.1 iPhone Duo runtime. Protocol compatibility remains separate from the
+app's deployment target.
 
 Build, test, archive, and release entry points check the selected Xcode and
 installed iPhoneOS SDK with the shared `ios-build-support` toolchain checker
