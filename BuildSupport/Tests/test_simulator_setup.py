@@ -29,6 +29,14 @@ class FakeCommandRunner:
             {
                 "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
                 "isAvailable": True,
+                "supportedDeviceTypes": [
+                    {
+                        "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                    },
+                    {
+                        "identifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4",
+                    },
+                ],
             }
         ]
         self.calls: list[tuple[tuple[str, ...], bool]] = []
@@ -50,6 +58,10 @@ class FakeCommandRunner:
                         {
                             "name": "iPhone 17 Pro",
                             "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        },
+                        {
+                            "name": "iPhone Duo",
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
                         },
                         {
                             "name": "iPad Pro 13-inch (M4)",
@@ -151,16 +163,26 @@ class SimulatorSetupTests(unittest.TestCase):
                 {
                     "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
                     "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
                 },
                 {
                     "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2",
                     "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
                 },
             ]
         )
 
         self.assertEqual(
-            simulator_setup.runtime_identifier(runner),
+            simulator_setup.select_runtime(runner).identifier,
             "com.apple.CoreSimulator.SimRuntime.iOS-27-2",
         )
 
@@ -178,7 +200,7 @@ class SimulatorSetupTests(unittest.TestCase):
             simulator_setup.SimulatorSetupError,
             "no available iOS 27.1 or later simulator runtime",
         ):
-            simulator_setup.runtime_identifier(runner)
+            simulator_setup.select_runtime(runner)
 
         self.assertEqual(runner.created_device_types, [])
 
@@ -207,6 +229,31 @@ class SimulatorSetupTests(unittest.TestCase):
         self.assertEqual(
             simslim_calls[1][3:],
             ("--profile", str(self.profile_path)),
+        )
+
+    def test_selects_a_device_type_supported_by_the_selected_runtime(self) -> None:
+        runner = FakeCommandRunner(
+            runtimes=[
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
+                        }
+                    ],
+                }
+            ]
+        )
+
+        simulator_setup.prepare_task_simulator(
+            task_name="device-hub-test-app",
+            run_command=runner,
+        )
+
+        self.assertEqual(
+            runner.created_device_types,
+            ["com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"],
         )
 
     def test_never_reuses_another_task_codex_simulator(self) -> None:
@@ -242,6 +289,21 @@ class SimulatorSetupTests(unittest.TestCase):
             runner.created_device_types,
             ["com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4"],
         )
+
+    def test_rejects_requested_device_type_not_supported_by_the_runtime(self) -> None:
+        runner = FakeCommandRunner()
+
+        with self.assertRaisesRegex(
+            simulator_setup.SimulatorSetupError,
+            "not supported by the selected iOS runtime",
+        ):
+            simulator_setup.prepare_task_simulator(
+                task_name="device-hub-test-app",
+                device_type_name="iPhone Duo",
+                run_command=runner,
+            )
+
+        self.assertEqual(runner.created_device_types, [])
 
     def test_missing_home_profile_fails_before_device_creation(self) -> None:
         runner = FakeCommandRunner()

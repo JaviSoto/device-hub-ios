@@ -53,6 +53,14 @@ class PreparedSimulator:
     name: str
 
 
+@dataclass(frozen=True)
+class SimulatorRuntime:
+    """The selected iOS runtime and its compatible simulator device types."""
+
+    identifier: str
+    supported_device_type_identifiers: frozenset[str]
+
+
 def validate_identifier(value: object) -> str:
     """Return one canonical CoreSimulator identifier or fail closed."""
 
@@ -140,8 +148,8 @@ def simulator_inventory(run_command: CommandRunner) -> tuple[SimulatorDevice, ..
     return tuple(devices)
 
 
-def runtime_identifier(run_command: CommandRunner) -> str:
-    """Select the newest available iOS 27.1+ runtime deterministically."""
+def select_runtime(run_command: CommandRunner) -> SimulatorRuntime:
+    """Select the newest iOS 27.1+ runtime and its supported device types."""
 
     payload = json_command(
         run_command,
@@ -169,14 +177,34 @@ def runtime_identifier(run_command: CommandRunner) -> str:
             candidates.append((version, identifier))
     if not candidates:
         raise SimulatorSetupError("no available iOS 27.1 or later simulator runtime")
-    return max(candidates, key=lambda candidate: candidate[0])[1]
+    selected_identifier = max(candidates, key=lambda candidate: candidate[0])[1]
+    selected_runtime = next(
+        runtime
+        for runtime in payload["runtimes"]
+        if isinstance(runtime, dict) and runtime.get("identifier") == selected_identifier
+    )
+    raw_device_types = selected_runtime.get("supportedDeviceTypes")
+    if not isinstance(raw_device_types, list):
+        raise SimulatorSetupError("selected iOS runtime has no supported simulator device types")
+    supported_device_type_identifiers = frozenset(
+        device_type["identifier"]
+        for device_type in raw_device_types
+        if isinstance(device_type, dict) and isinstance(device_type.get("identifier"), str)
+    )
+    if not supported_device_type_identifiers:
+        raise SimulatorSetupError("selected iOS runtime has no supported simulator device types")
+    return SimulatorRuntime(
+        identifier=selected_identifier,
+        supported_device_type_identifiers=supported_device_type_identifiers,
+    )
 
 
 def device_type_identifier(
     run_command: CommandRunner,
+    supported_device_type_identifiers: frozenset[str],
     requested_name: str | None = None,
 ) -> str:
-    """Select an exact requested model or the preferred iPhone model."""
+    """Select an exact compatible model or the preferred compatible iPhone."""
 
     payload = json_command(
         run_command,
@@ -201,17 +229,30 @@ def device_type_identifier(
             raise SimulatorSetupError(
                 f"no exact iPhone or iPad simulator device type named {requested_name!r}"
             )
+        if selected["identifier"] not in supported_device_type_identifiers:
+            raise SimulatorSetupError(
+                f"simulator device type {requested_name!r} is not supported by the selected iOS runtime"
+            )
     else:
+        compatible = tuple(
+            device
+            for device in candidates
+            if device["identifier"] in supported_device_type_identifiers
+        )
         preferred = next(
-            (device for device in candidates if device["name"] == "iPhone 17 Pro"),
+            (device for device in compatible if device["name"] == "iPhone Duo"),
             None,
         )
-        selected = preferred or next(
-            (device for device in candidates if device["name"].startswith("iPhone ")),
+        standard = next(
+            (device for device in compatible if device["name"] == "iPhone 17 Pro"),
+            None,
+        )
+        selected = preferred or standard or next(
+            (device for device in compatible if device["name"].startswith("iPhone ")),
             None,
         )
     if selected is None:
-        raise SimulatorSetupError("no iPhone simulator device type")
+        raise SimulatorSetupError("no iPhone simulator device type supported by the selected iOS runtime")
     return selected["identifier"]
 
 
@@ -252,6 +293,7 @@ def create_task_simulator(
     """Create and verify one fresh simulator rather than borrowing a device."""
 
     name = task_simulator_name(task_name)
+    runtime = select_runtime(run_command)
     identifier = validate_identifier(
         run_command(
             (
@@ -259,8 +301,12 @@ def create_task_simulator(
                 "simctl",
                 "create",
                 name,
-                device_type_identifier(run_command, device_type_name),
-                runtime_identifier(run_command),
+                device_type_identifier(
+                    run_command,
+                    runtime.supported_device_type_identifiers,
+                    device_type_name,
+                ),
+                runtime.identifier,
             ),
             True,
         ).strip()
