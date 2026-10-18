@@ -23,8 +23,10 @@ class FakeCommandRunner:
         self,
         devices: list[dict[str, object]] | None = None,
         runtimes: list[dict[str, object]] | None = None,
+        sdk_version: str = "27.1",
     ) -> None:
         self.devices = devices or []
+        self.sdk_version = sdk_version
         self.runtimes = runtimes if runtimes is not None else [
             {
                 "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
@@ -47,6 +49,8 @@ class FakeCommandRunner:
 
     def __call__(self, arguments: tuple[str, ...], check: bool = True) -> str:
         self.calls.append((arguments, check))
+        if arguments[1:] == ("--sdk", "iphoneos", "--show-sdk-version"):
+            return self.sdk_version
         if arguments[1:5] == ("simctl", "list", "devices", "available"):
             return json.dumps({"devices": {"iOS 27.1": self.devices}})
         if arguments[1:4] == ("simctl", "list", "runtimes"):
@@ -153,7 +157,7 @@ class SimulatorSetupTests(unittest.TestCase):
         self.which_patch.start()
         self.addCleanup(self.which_patch.stop)
 
-    def test_selects_newest_runtime_at_or_above_the_app_floor(self) -> None:
+    def test_default_runtime_stays_within_selected_sdk_and_rejects_newer_request(self) -> None:
         runner = FakeCommandRunner(
             runtimes=[
                 {
@@ -183,8 +187,14 @@ class SimulatorSetupTests(unittest.TestCase):
 
         self.assertEqual(
             simulator_setup.select_runtime(runner).identifier,
-            "com.apple.CoreSimulator.SimRuntime.iOS-27-2",
+            "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
         )
+
+        with self.assertRaisesRegex(
+            simulator_setup.SimulatorSetupError,
+            "requested iOS simulator runtime 27.2 is newer than selected iOS SDK 27.1",
+        ):
+            simulator_setup.select_runtime(runner, requested_version="27.2")
 
     def test_rejects_runtime_below_the_app_floor(self) -> None:
         runner = FakeCommandRunner(
@@ -198,11 +208,90 @@ class SimulatorSetupTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             simulator_setup.SimulatorSetupError,
-            "no available iOS 27.0 or later simulator runtime",
+            "no available iOS simulator runtime between 27.0 and selected iOS SDK 27.1",
         ):
             simulator_setup.select_runtime(runner)
 
         self.assertEqual(runner.created_device_types, [])
+
+    def test_default_runtime_selects_highest_runtime_compatible_with_exact_device(self) -> None:
+        runner = FakeCommandRunner(
+            runtimes=[
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
+                },
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
+                        }
+                    ],
+                },
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
+                },
+            ]
+        )
+
+        self.assertEqual(
+            simulator_setup.select_runtime(
+                runner,
+                requested_device_type_name="iPhone 17 Pro",
+            ).identifier,
+            "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+        )
+
+    def test_default_runtime_requires_a_compatible_iphone_type(self) -> None:
+        runner = FakeCommandRunner(
+            runtimes=[
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
+                },
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4",
+                        }
+                    ],
+                },
+                {
+                    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-2",
+                    "isAvailable": True,
+                    "supportedDeviceTypes": [
+                        {
+                            "identifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                        }
+                    ],
+                },
+            ]
+        )
+
+        self.assertEqual(
+            simulator_setup.select_runtime(runner).identifier,
+            "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+        )
 
     def test_selects_explicit_270_runtime_for_a_supported_phone(self) -> None:
         runner = FakeCommandRunner(
@@ -393,7 +482,7 @@ class SimulatorSetupTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             simulator_setup.SimulatorSetupError,
-            "not supported by the selected iOS runtime",
+            "no available iOS simulator runtime .* supports device type 'iPhone Duo'",
         ):
             simulator_setup.prepare_task_simulator(
                 task_name="device-hub-test-app",

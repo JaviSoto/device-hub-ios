@@ -91,16 +91,20 @@ Scripts/release.sh --release-notes-file /absolute/path/release-notes.md
 
 The command builds one artifact, records its source revision, and sends it to
 `POST https://api.builds.lan/v1/builds/ios` through the canonical uploader at
-`/Volumes/RunnerCache/code/builds-native/Scripts/upload-builds-lan-api.py`.
+`Scripts/upload-builds-lan-api.py` under `BUILDS_NATIVE_DIR` (default:
+`~/code/builds-native`). On JaviMini, set `BUILDS_NATIVE_DIR` to the existing
+`/Volumes/RunnerCache/code/builds-native` checkout.
 It does not install the app on a device or use a second catalog or publication
 route. Release notes are required and must contain only the user-visible
 changes since the previous Device Hub build.
 
 By default, signing reads the existing App Store Connect fields (`issuer_id`,
 `key_id`, and `key`) through `codex-secret`'s private file descriptor, and the
-publisher reads the existing Builds upload `token` the same way. Neither needs
-a local token file. Explicit mode-0600 file overrides are available through
-`APPLE_API_KEY_JSON` and `BUILDS_LAN_UPLOAD_TOKEN_FILE`. Builds use the
+publisher reads the existing Builds upload `token` the same way. The normal
+release path requires this private-descriptor route and does not put secrets in
+arguments or environment variables. Explicit mode-0600 file overrides remain
+available through `APPLE_API_KEY_JSON` and `BUILDS_LAN_UPLOAD_TOKEN_FILE`.
+Builds use the
 currently selected Xcode and the native DerivedData path at
 `~/Library/Developer/Xcode/DerivedData/DeviceHub`; archive logs and the
 `.xcresult` are saved outside the repository under
