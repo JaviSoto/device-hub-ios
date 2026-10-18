@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -28,6 +29,32 @@ def target_block(name: str) -> str:
 
 
 class ProjectLinkageTests(unittest.TestCase):
+    def test_ios_runtime_version_guard_checks_numeric_versions(self) -> None:
+        helper = REPOSITORY_ROOT / "BuildSupport/check_xcode_toolchain.sh"
+        for version, expected in (
+            ("27.0", False),
+            ("27.1", True),
+            ("27.2", True),
+            ("28.0", True),
+            ("27", False),
+            ("27.invalid", False),
+        ):
+            with self.subTest(version=version):
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-c",
+                        'source "$1"; is_ios_271_or_later "$2"',
+                        "bash",
+                        str(helper),
+                        version,
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode == 0, expected, result.stderr)
+
     def test_ios_deployment_floor_is_271_across_app_and_native_inputs(self) -> None:
         project = PROJECT_SPECIFICATION.read_text(encoding="utf-8")
         package = (REPOSITORY_ROOT / "Packages/DeviceHubKit/Package.swift").read_text(

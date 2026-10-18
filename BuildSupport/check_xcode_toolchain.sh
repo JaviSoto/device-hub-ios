@@ -9,3 +9,13 @@ devicehub_check_xcode_toolchain() {
   fi
   python3 "$checker" --minimum-xcode 27.1 --minimum-ios-sdk 27.1
 }
+
+is_ios_271_or_later() {
+  if (( $# != 1 )) || [[ ! "$1" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)*$ ]]; then
+    return 1
+  fi
+
+  local major=$((10#${BASH_REMATCH[1]}))
+  local minor=$((10#${BASH_REMATCH[2]}))
+  (( major > 27 || (major == 27 && minor >= 1) ))
+}
