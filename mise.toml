@@ -92,7 +92,10 @@ run = "swiftformat Packages Sources Tools --config .swiftformat --lint"
 
 [tasks."lint:swift"]
 description = "Lint Swift source"
-run = "swiftlint lint --config .swiftlint.yml --strict"
+run = """
+SHARED_IOS_SUPPORT_DIR="${SHARED_IOS_SUPPORT_DIR:-$HOME/code/ios-build-support}"
+"$SHARED_IOS_SUPPORT_DIR/scripts/lint-swift.sh" --project-config .swiftlint.yml
+"""
 
 [tasks."lint:shell"]
 description = "Validate repository shell entry points"

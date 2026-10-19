@@ -81,20 +81,11 @@
 
         init(scenario: VisualScenario) throws {
             let appearance = scenario.appearance
-            let idiom = scenario.idiom
-            size = scenario.size
+            let viewportSize = scenario.size
+            size = viewportSize
             traits = UITraitCollection { traits in
-                traits.userInterfaceIdiom = idiom
-                traits.horizontalSizeClass =
-                    scenario == .liveLandscapeIPadTargetIPhoneDark
-                        ? .regular
-                        : idiom == .pad
-                        ? .regular
-                        : .compact
-                traits.verticalSizeClass =
-                    scenario == .liveLandscapeIPadTargetIPhoneDark
-                        ? .compact
-                        : .regular
+                traits.horizontalSizeClass = viewportSize.width >= 600 ? .regular : .compact
+                traits.verticalSizeClass = viewportSize.height >= 600 ? .regular : .compact
                 traits.displayScale = 2
                 traits.userInterfaceStyle = appearance
                 traits.preferredContentSizeCategory =

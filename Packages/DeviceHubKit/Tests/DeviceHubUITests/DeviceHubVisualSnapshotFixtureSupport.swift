@@ -84,30 +84,23 @@
             }
         }
 
-        var idiom: UIUserInterfaceIdiom {
-            switch self {
-            case .developerModeIPadAccessibility,
-                 .liveIPadLight,
-                 .liveIPadDark,
-                 .deviceDetailsPendingVersionIPadLight,
-                 .aboutNoticesIPadLight,
-                 .developerImageUnavailableIPadLight,
-                 .xcodePreparationIPadLight,
-                 .localNetworkDeniedIPadDark,
-                 .viewingOnlyIPadLight:
-                .pad
-            default:
-                .phone
-            }
-        }
-
         var size: CGSize {
-            if self == .liveLandscapeIPadTargetIPhoneDark {
-                return CGSize(width: 956, height: 440)
+            switch self {
+            case .liveLandscapeIPadTargetIPhoneDark:
+                CGSize(width: 956, height: 440)
+            case .emptyIPhoneLight,
+                 .pairingIPhoneDark,
+                 .connectingIPhoneLight,
+                 .liveIPhoneDark,
+                 .offlineIPhoneDark,
+                 .lockedIPhoneAccessibility,
+                 .deviceBusyIPhoneDark,
+                 .developerImageIncompatibleIPhoneDark,
+                 .noticesUnavailableIPhoneDark:
+                CGSize(width: 440, height: 956)
+            default:
+                CGSize(width: 1180, height: 820)
             }
-            return idiom == .pad
-                ? CGSize(width: 1180, height: 820)
-                : CGSize(width: 440, height: 956)
         }
 
         var usesAccessibilityText: Bool {

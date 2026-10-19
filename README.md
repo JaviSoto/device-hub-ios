@@ -43,6 +43,10 @@ installed iPhoneOS SDK with the shared `ios-build-support` toolchain checker
 before compiling. Set `DEVELOPER_DIR` to the Xcode 27.1 installation when that
 is not the machine's selected Xcode.
 
+The Swift lint task loads the shared adaptive-layout rule from
+`~/code/ios-build-support`. Set `SHARED_IOS_SUPPORT_DIR` when that checkout is
+located elsewhere.
+
 ## Getting started
 
 The Xcode project is generated with
