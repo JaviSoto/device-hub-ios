@@ -16,6 +16,7 @@ class AccessibilityScreen(StrEnum):
     naming = "naming"
     post_bootstrap = "post-bootstrap"
     live = "live"
+    folded_live = "folded-live"
     controls_menu = "controls-menu"
 
 
@@ -35,6 +36,9 @@ EXPECTED_VALUES = {
         }
     ),
     AccessibilityScreen.live: frozenset({"More Controls"}),
+    AccessibilityScreen.folded_live: frozenset(
+        {"More Controls", "Remote Controls", "Home", "Lock", "Keyboard", "Rotate"}
+    ),
     AccessibilityScreen.controls_menu: frozenset({"Home", "Lock", "Keyboard", "Rotate"}),
 }
 BLOCKED_VALUES = frozenset(

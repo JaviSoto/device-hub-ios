@@ -11,6 +11,22 @@ import accessibility_contract
 
 
 class AccessibilityContractTests(unittest.TestCase):
+    def test_folded_session_exposes_direct_controls_without_opening_more(self) -> None:
+        baseline = accessibility_contract.inspect_hierarchy(
+            {"label": "More Controls"},
+            screen=accessibility_contract.AccessibilityScreen.folded_live,
+        )
+        self.assertFalse(baseline.is_ready)
+        self.assertEqual(baseline.missing, ("Home", "Keyboard", "Lock", "Remote Controls", "Rotate"))
+
+        folded = accessibility_contract.inspect_hierarchy(
+            {"children": [{"label": label} for label in (
+                "More Controls", "Remote Controls", "Home", "Lock", "Keyboard", "Rotate",
+            )]},
+            screen=accessibility_contract.AccessibilityScreen.folded_live,
+        )
+        self.assertTrue(folded.is_ready)
+
     def test_live_screen_exposes_only_the_corner_menu(self) -> None:
         for label in ("Home", "Lock", "Keyboard", "Rotate"):
             with self.subTest(label=label):

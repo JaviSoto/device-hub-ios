@@ -8,100 +8,141 @@ struct RemoteSessionView: View {
     @Binding var isKeyboardPresented: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHeaderVisible = true
+    @State private var hasActiveDivision = false
 
     let aboutButtonTapped: () -> Void
     let detailsButtonTapped: () -> Void
     let pairButtonTapped: () -> Void
 
     var body: some View {
-        ZStack {
-            canvas.ignoresSafeArea(.container)
-
-            sessionOverlays
-        }
-        .background {
-            RemoteCanvasColor.value.ignoresSafeArea()
-        }
-        .deviceHubHiddenNavigationBar()
-        .onChange(of: store.selectedDeviceID, selectedDeviceIDChanged)
-        .onChange(of: store.acceptsInput, acceptsInputChanged)
-        .task(id: store.toolbarPresentation) {
-            isHeaderVisible = true
-            guard let delay = store.toolbarPresentation.headerDismissalDelay else {
-                return
-            }
-            do {
-                try await Task.sleep(for: delay)
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.35)) {
-                    isHeaderVisible = false
+        sessionArrangement
+            .overlay {
+                if isKeyboardPresented {
+                    DeviceKeyboardReceiver(
+                        isPresented: $isKeyboardPresented,
+                        keyChanged: keyChanged,
+                        keyTapped: keyTapped
+                    )
+                    .frame(width: 1, height: 1)
+                    .opacity(0.001)
+                    .accessibilityHidden(true)
                 }
-            } catch is CancellationError {
-                // A target/status change cancels the old header's dismissal.
-            } catch {
-                assertionFailure("Header dismissal failed: \(error)")
             }
-        }
+            .background {
+                RemoteCanvasColor.value.ignoresSafeArea()
+            }
+            .deviceHubHiddenNavigationBar()
+            .onChange(of: store.selectedDeviceID, selectedDeviceIDChanged)
+            .onChange(of: store.acceptsInput, acceptsInputChanged)
+            .task(id: store.toolbarPresentation) {
+                isHeaderVisible = true
+                guard let delay = store.toolbarPresentation.headerDismissalDelay else {
+                    return
+                }
+                do {
+                    try await Task.sleep(for: delay)
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.35)) {
+                        isHeaderVisible = false
+                    }
+                } catch is CancellationError {
+                    // A target/status change cancels the old header's dismissal.
+                } catch {
+                    assertionFailure("Header dismissal failed: \(error)")
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var sessionArrangement: some View {
+        #if os(iOS)
+            if #available(iOS 27.1, *) {
+                ArrangementView {
+                    RemoteSessionControlSurface(
+                        showsDirectControls: hasActiveDivision && !isKeyboardPresented,
+                        controls: foldedControls,
+                        menu: sessionMenu
+                    )
+                } secondary: {
+                    canvasWithHeader
+                }
+                .arrangementViewStyle(.overlay)
+                .onGeometryChange(for: Bool.self) { proxy in
+                    !proxy.reservedRegions(kind: .division).isEmpty
+                } action: {
+                    hasActiveDivision = $0
+                }
+            } else {
+                flatSession
+            }
+        #else
+            flatSession
+        #endif
+    }
+
+    private var flatSession: some View {
+        canvasWithHeader
+            .overlay(alignment: .topTrailing) {
+                sessionMenu.padding(6)
+            }
     }
 
     private var canvas: some View {
-        ZStack {
-            RemoteCanvas(
-                acceptsInput: store.acceptsInput,
-                device: store.selectedDevice,
-                frame: store.session?.frame,
-                isViewingStopped: store.isViewingStopped,
-                presentation: store.sessionPresentation,
-                remediation: store.remediation,
-                pairButtonTapped: pairButtonTapped,
-                remediationButtonTapped: remediationButtonTapped,
-                remediationDismissed: remediationDismissed,
-                startViewingButtonTapped: startViewingButtonTapped,
-                tap: tap,
-                touch: touch
-            )
-            .id(store.selectedDeviceID)
-
-            if isKeyboardPresented {
-                DeviceKeyboardReceiver(
-                    isPresented: $isKeyboardPresented,
-                    keyChanged: keyChanged,
-                    keyTapped: keyTapped
-                )
-                .frame(width: 1, height: 1)
-                .opacity(0.001)
-                .accessibilityHidden(true)
-            }
-        }
+        RemoteCanvas(
+            acceptsInput: store.acceptsInput,
+            device: store.selectedDevice,
+            frame: store.session?.frame,
+            isViewingStopped: store.isViewingStopped,
+            presentation: store.sessionPresentation,
+            remediation: store.remediation,
+            pairButtonTapped: pairButtonTapped,
+            remediationButtonTapped: remediationButtonTapped,
+            remediationDismissed: remediationDismissed,
+            startViewingButtonTapped: startViewingButtonTapped,
+            tap: tap,
+            touch: touch
+        )
+        .id(store.selectedDeviceID)
     }
 
-    private var sessionOverlays: some View {
-        Color.clear
-            .allowsHitTesting(false)
+    private var canvasWithHeader: some View {
+        canvas
+            .ignoresSafeArea(.container)
             .overlay(alignment: .top) {
                 floatingHeader
                     .padding(.horizontal, 56)
                     .padding(.top, 8)
             }
-            .overlay(alignment: .topTrailing) {
-                RemoteSessionMenu(
-                    acceptsInput: store.acceptsInput,
-                    isViewingStopped: store.isViewingStopped,
-                    hasActiveSession: store.session != nil,
-                    devices: store.roster.devices,
-                    selectedDeviceID: store.selectedDeviceID,
-                    aboutButtonTapped: aboutButtonTapped,
-                    buttonTapped: hardwareButtonTapped,
-                    deviceSelected: deviceSelected,
-                    detailsButtonTapped: detailsButtonTapped,
-                    keyboardButtonTapped: keyboardButtonTapped,
-                    pairButtonTapped: pairButtonTapped,
-                    reconnectButtonTapped: reconnectButtonTapped,
-                    rotateButtonTapped: rotateButtonTapped,
-                    startViewingButtonTapped: startViewingButtonTapped,
-                    stopViewingButtonTapped: stopViewingButtonTapped
-                )
-                .padding(6)
-            }
+    }
+
+    private var sessionMenu: RemoteSessionMenu {
+        RemoteSessionMenu(
+            acceptsInput: store.acceptsInput,
+            isViewingStopped: store.isViewingStopped,
+            hasActiveSession: store.session != nil,
+            devices: store.roster.devices,
+            selectedDeviceID: store.selectedDeviceID,
+            aboutButtonTapped: aboutButtonTapped,
+            buttonTapped: hardwareButtonTapped,
+            deviceSelected: deviceSelected,
+            detailsButtonTapped: detailsButtonTapped,
+            keyboardButtonTapped: keyboardButtonTapped,
+            pairButtonTapped: pairButtonTapped,
+            reconnectButtonTapped: reconnectButtonTapped,
+            rotateButtonTapped: rotateButtonTapped,
+            startViewingButtonTapped: startViewingButtonTapped,
+            stopViewingButtonTapped: stopViewingButtonTapped
+        )
+    }
+
+    private var foldedControls: RemoteSessionFoldedControls {
+        RemoteSessionFoldedControls(
+            acceptsInput: store.acceptsInput,
+            isKeyboardPresented: isKeyboardPresented,
+            home: { hardwareButtonTapped(.home) },
+            lock: { hardwareButtonTapped(.lock) },
+            keyboard: keyboardButtonTapped,
+            rotate: rotateButtonTapped
+        )
     }
 
     @ViewBuilder

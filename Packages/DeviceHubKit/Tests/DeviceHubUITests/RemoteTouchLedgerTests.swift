@@ -5,6 +5,42 @@ import Testing
 
 @Suite("Remote touch ledger")
 struct RemoteTouchLedgerTests {
+    @Test("Folding and rotating the canvas preserve remote hit coordinates", arguments: ScreenOrientation.allCases)
+    func resizedCanvasPreservesHitCoordinates(orientation: ScreenOrientation) throws {
+        let pixels = PixelSize(width: 1179, height: 2556)
+        var mappedPoints: [TargetPixelPoint] = []
+        for canvasSize in [
+            CGSize(width: 466, height: 678),
+            CGSize(width: 951, height: 669),
+            CGSize(width: 951, height: 320),
+            CGSize(width: 320, height: 951)
+        ] {
+            let renderedSize = RemoteScreenLayout.size(
+                in: canvasSize,
+                targetPixels: pixels,
+                orientation: orientation
+            )
+            let viewport = RemoteInputSurfaceGeometry.viewport(for: renderedSize)
+            try mappedPoints.append(#require(RemoteCoordinateMapper.mapInitialTouch(
+                Point2D(x: renderedSize.width * 0.25, y: renderedSize.height * 0.75),
+                in: viewport,
+                targetPixels: pixels,
+                orientation: orientation
+            )))
+            #expect(RemoteCoordinateMapper.mapInitialTouch(
+                Point2D(x: -1, y: renderedSize.height / 2),
+                in: viewport,
+                targetPixels: pixels,
+                orientation: orientation
+            ) == nil)
+        }
+        let first = try #require(mappedPoints.first)
+        for point in mappedPoints {
+            #expect(abs(point.x - first.x) < 0.000_000_001)
+            #expect(abs(point.y - first.y) < 0.000_000_001)
+        }
+    }
+
     @Test("rendered screen uses the whole canvas without padding")
     func renderedScreenUsesExplicitAspectFitBounds() {
         let size = RemoteScreenLayout.size(

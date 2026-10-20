@@ -88,6 +88,33 @@ interrupted or cleanup cannot be proven, inspect that device's exact identity
 and state, then use the helper's `cleanup` command with its original UDID and
 name before retrying. Do not add a host-wide lease, lock, or watcher.
 
+The old `codex-simulator-lease` prerequisite in the repository agent guide is
+retired. The maintained `BuildSupport/simulator_setup.py` helper owns allocation,
+SimSlim verification, and exact-device cleanup. Coordinate a shared renderer
+with its current owner before changing pose; never create a second device to
+work around that owner's active use.
+
+For Duo folded-control verification, build generically first, then use a real
+27.1 `iPhone Duo` from the helper and launch `--device-hub-fixture live`. Capture
+the actual half-open hierarchy and run:
+
+```sh
+python3 BuildSupport/accessibility_contract.py --screen folded-live /absolute/path/to/half-open-axe.json
+```
+
+The unfixed app lacks Home, Lock, Keyboard, Rotate, and Remote Controls outside
+the menu. After the change, the direct controls must occupy the lower area and
+the same session's remote image the upper area. Check both themes, rotate,
+open/close the native keyboard, and fold back to flat/cover without relaunching.
+Run the existing `--screen live` check after flattening to prove the bottom
+controls disappear. Inspect the screenshots as well as the hierarchy; this
+text-only contract cannot establish pose, geometry, or remote hit accuracy.
+
+To add only a new snapshot method's references, run
+`DEVICE_HUB_RECORD_SNAPSHOTS=1 DEVICE_HUB_RECORD_SNAPSHOT_TEST=RemoteSessionFoldedControlsSnapshotTests Scripts/test-app.sh`.
+The selector narrows only recording; the subsequent verification still runs
+every visual snapshot. Inspect existing reference changes before accepting any.
+
 ## Regression strategy
 
 For a reproducible defect:

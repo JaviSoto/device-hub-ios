@@ -18,6 +18,7 @@ RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 EVIDENCE_ROOT="${DEVICE_HUB_TEST_EVIDENCE_DIR:-$DERIVED_DATA_PATH/TestEvidence/DeviceHub/$RUN_ID}"
 ACCESSIBILITY_JSON="$RUN_ROOT/accessibility.json"
 RECORD_SNAPSHOTS="${DEVICE_HUB_RECORD_SNAPSHOTS:-0}"
+RECORD_SNAPSHOT_TEST="${DEVICE_HUB_RECORD_SNAPSHOT_TEST:-}"
 
 # Invoked by the EXIT trap below.
 # shellcheck disable=SC2329
@@ -78,6 +79,13 @@ run_ui_snapshot_tests() {
   local compilation_conditions
   local raw_log
   local result_bundle
+  local snapshot_tests=(
+    "-only-testing:DeviceHubUITests/DeviceHubVisualSnapshotTests"
+    "-only-testing:DeviceHubUITests/RemoteSessionFoldedControlsSnapshotTests"
+  )
+  if [[ "$record_mode" == "1" && -n "$RECORD_SNAPSHOT_TEST" ]]; then
+    snapshot_tests=("-only-testing:DeviceHubUITests/$RECORD_SNAPSHOT_TEST")
+  fi
   if [[ "$record_mode" == "1" ]]; then
     pass_name="record"
   fi
@@ -101,7 +109,7 @@ run_ui_snapshot_tests() {
         -scheme DeviceHubKit-Package \
         -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
         -derivedDataPath "$DERIVED_DATA_PATH" \
-        -only-testing:DeviceHubUITests/DeviceHubVisualSnapshotTests \
+        "${snapshot_tests[@]}" \
         -parallel-testing-enabled NO \
         -collect-test-diagnostics never \
         -skipMacroValidation \

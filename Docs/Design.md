@@ -20,6 +20,27 @@ The app hard-targets iOS/iPadOS 27 and uses current SwiftUI directly:
   Lock, Keyboard, Rotate, device selection, pairing, details, and session options;
 - no bottom action bar, trailing control rail, or app-added canvas padding.
 
+On iPhone Duo 27.1, an overlay `ArrangementView` separates the existing canvas
+and controls only when the display folds. Its primary view contains controls;
+the secondary view contains the remote screen. Native arrangement layout puts
+the screen above controls in tabletop orientation and beside them after
+rotation. An `onGeometryChange` Boolean projection of active `.division`
+reserved regions exposes direct controls only when that fold overlaps the
+arrangement's available area. No hinge-angle thresholds or device-family checks
+decide layout. The `NavigationStack` stays outside the arrangement. iOS 27.0
+keeps the established full-window layout through one API-availability check.
+
+The iOS 27.1 `24A94425` simulator reports `overlayArrangementZIndex == 0` to
+both immediate primary and secondary readers in cover, flat, and half-open
+states. It does not distinguish separation on that runtime. Active native
+division regions do: inactive when flat, active when folded. The query uses
+the default active-only regions and never computes pane frames. When the
+native keyboard opens, the existing UIKit-backed presentation binding hides
+the panel from the remaining overlay rather than obscuring the remote image.
+The keyboard's own accessory controls and corner More menu remain available.
+Native keyboard avoidance and `ArrangementView` placement remain responsible
+for the space.
+
 Liquid Glass gives the small controls contrast over the device image. The
 rest of the canvas remains clear.
 

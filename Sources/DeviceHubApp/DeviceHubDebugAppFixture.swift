@@ -121,12 +121,20 @@
                 )
             )
 
+            let feedback = FixtureFeedback(
+                metadata: metadata,
+                eventSink: eventSource.continuation,
+                frameSink: frameSource.continuation
+            )
+
             return DeviceSession(
                 id: sessionID,
                 device: device,
                 events: eventSource.stream,
                 frames: frameSource.stream,
-                command: { _ in },
+                command: { command in
+                    try await feedback.receive(command)
+                },
                 disconnect: {
                     eventSource.continuation.finish()
                     frameSource.continuation.finish()
@@ -136,7 +144,8 @@
 
         private static func makeRemoteScreenImage(
             width: Int,
-            height: Int
+            height: Int,
+            feedback: DeviceCommand? = nil
         ) throws -> CGImage {
             let format = UIGraphicsImageRendererFormat()
             format.scale = 1
@@ -197,11 +206,96 @@
                         showsSeparator: index < secondRows.count - 1
                     )
                 }
+
+                if let feedback {
+                    drawFeedback(feedback, context: context, width: width, height: height)
+                }
             }
             guard let cgImage = image.cgImage else {
                 throw DeviceHubError.secureConnectionFailed
             }
             return cgImage
+        }
+
+        /// The fixture changes only synthetic remote pixels. It acknowledges
+        /// commands at the service boundary without logging or retaining text.
+        private actor FixtureFeedback {
+            let initialMetadata: FrameMetadata
+            let eventSink: AsyncThrowingStream<SessionUpdate, Error>.Continuation
+            let frameSink: AsyncStream<RemoteDisplayFrame>.Continuation
+            private var sequenceNumber: UInt64
+
+            init(
+                metadata: FrameMetadata,
+                eventSink: AsyncThrowingStream<SessionUpdate, Error>.Continuation,
+                frameSink: AsyncStream<RemoteDisplayFrame>.Continuation
+            ) {
+                initialMetadata = metadata
+                self.eventSink = eventSink
+                self.frameSink = frameSink
+                sequenceNumber = metadata.sequenceNumber
+            }
+
+            func receive(_ command: DeviceCommand) throws {
+                // Releasing held input must not erase the last visible
+                // acknowledgement needed to verify a tap or key end to end.
+                switch command {
+                case .releaseAllInput: return
+                case .tap, .touch, .key, .keyTap, .button, .buttonTap, .rotation: break
+                }
+                sequenceNumber += 1
+                let metadata = FrameMetadata(
+                    generation: initialMetadata.generation,
+                    sequenceNumber: sequenceNumber,
+                    receivedAt: Date(),
+                    pixelSize: initialMetadata.pixelSize,
+                    orientation: initialMetadata.orientation
+                )
+                let image = try makeRemoteScreenImage(
+                    width: metadata.pixelSize.width,
+                    height: metadata.pixelSize.height,
+                    feedback: command
+                )
+                eventSink.yield(SessionUpdate(generation: metadata.generation, event: .videoFrame(metadata)))
+                frameSink.yield(RemoteDisplayFrame(metadata: .videoFrame(metadata), image: image))
+            }
+        }
+
+        private static func drawFeedback(
+            _ command: DeviceCommand,
+            context: CGContext,
+            width: Int,
+            height: Int
+        ) {
+            let label: String
+            switch command {
+            case let .tap(point):
+                context.setStrokeColor(UIColor.systemRed.cgColor)
+                context.setLineWidth(12)
+                context.strokeEllipse(in: CGRect(x: point.x - 35, y: point.y - 35, width: 70, height: 70))
+                label = "Tap received"
+            case let .touch(contact):
+                context.setStrokeColor(UIColor.systemRed.cgColor)
+                context.setLineWidth(12)
+                context.strokeEllipse(in: CGRect(x: contact.point.x - 35, y: contact.point.y - 35, width: 70, height: 70))
+                label = "Touch received"
+            case .key, .keyTap: label = "Keyboard received"
+            case let .button(button, _), let .buttonTap(button):
+                label = switch button {
+                case .home: "Home received"
+                case .lock: "Lock received"
+                case .mute: "Mute received"
+                case .siri: "Siri received"
+                case .volumeDown: "Volume Down received"
+                case .volumeUp: "Volume Up received"
+                }
+            case .rotation: label = "Rotation received"
+            case .releaseAllInput: label = "Input released"
+            }
+            let banner = CGRect(x: 40, y: height - 200, width: width - 80, height: 120)
+            context.setFillColor(UIColor.systemIndigo.cgColor)
+            context.fill(rounded: banner, radius: 24)
+            drawText(label, at: CGPoint(x: 72, y: height - 170), size: 48, color: .white)
         }
 
         private static func drawSettingsRow(

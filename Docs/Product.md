@@ -62,7 +62,12 @@ control rail. The remote canvas has no app-added padding.
 
 - iPhone and iPad use one full-window remote-session screen. The More menu
   contains device selection. Device details use a sheet.
-- Every window size keeps hardware actions inside the corner menu.
+- Flat and cover displays keep hardware actions inside the corner menu.
+- On iPhone Duo 27.1, half-open mode places the remote screen above a dedicated
+  touch-control area (or beside it when rotated). Home, Lock, Keyboard, and
+  Rotate are directly available there. Opening the keyboard uses the existing
+  native responder; selection, session, and remote hit coordinates stay shared.
+  Flat and cover displays still use the full-window canvas and corner menu.
 - Both platforms support light and dark appearance, Dynamic Type, portrait and
   landscape targets, reduced motion, VoiceOver, and hardware keyboards.
 
