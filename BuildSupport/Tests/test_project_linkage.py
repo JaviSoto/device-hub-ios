@@ -92,9 +92,9 @@ class ProjectLinkageTests(unittest.TestCase):
             "the Rust XCFramework slices must target iOS 27.0",
         )
         self.assertIn(
-            'readonly BUILD_ROOT="$REPOSITORY_ROOT/Rust/.build/cargo-ios-$DEPLOYMENT_TARGET"',
+            'readonly BUILD_ROOT="${DEVICE_HUB_PROTOCOL_TARGET_DIR:-$DERIVED_DATA_PATH/Rust/.build/cargo-ios-$DEPLOYMENT_TARGET}"',
             build_xcframework,
-            "Rust objects must not reuse caches from a different deployment floor",
+            "Rust objects must use the task's external compiler cache and not reuse a different deployment floor",
         )
         self.assertIn(
             "devicehub_check_xcode_toolchain",

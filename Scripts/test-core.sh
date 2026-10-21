@@ -19,12 +19,9 @@ fi
 export DEVELOPER_DIR
 devicehub_check_xcode_toolchain
 
-SCRATCH_PATH="${SWIFT_SCRATCH_PATH:-}"
+SCRATCH_PATH="${SWIFT_SCRATCH_PATH:-$DERIVED_DATA_PATH/SwiftPM/DeviceHubKit}"
 TEST_ARGUMENTS=(--package-path "$ROOT/Packages/DeviceHubKit")
-
-if [[ -n "$SCRATCH_PATH" ]]; then
-  TEST_ARGUMENTS+=(--scratch-path "$SCRATCH_PATH")
-fi
+TEST_ARGUMENTS+=(--scratch-path "$SCRATCH_PATH")
 
 OUTPUT_ROOT="$DERIVED_DATA_PATH/RunOutputs"
 mkdir -p "$OUTPUT_ROOT"

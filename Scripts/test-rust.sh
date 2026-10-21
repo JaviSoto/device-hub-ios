@@ -58,7 +58,7 @@ readonly RUST_TOOLCHAIN_BIN
 export PATH="$RUST_TOOLCHAIN_BIN:$PATH"
 export RUSTC="$RUST_TOOLCHAIN_BIN/rustc"
 export RUSTDOC="$RUST_TOOLCHAIN_BIN/rustdoc"
-export CARGO_TARGET_DIR="$REPOSITORY_ROOT/Rust/.build/tests"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$DERIVED_DATA_PATH/Rust/.build/tests}"
 readonly CARGO=(rustup run "$RUST_TOOLCHAIN" cargo)
 
 if ! rg -Fq "idevice-revision = \"$IDEVICE_REVISION\"" \

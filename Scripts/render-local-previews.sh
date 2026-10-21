@@ -11,6 +11,8 @@ RENDERER_PACKAGE="$ROOT/Tools/DeviceHubPreviewRenderer"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT_DIR="${OUT_DIR:-$ROOT/PreviewArtifacts/local-$STAMP}"
 RENDERER_PRODUCT="${PREVIEW_RENDERER_PRODUCT:-DeviceHubPreviewRenderer}"
+DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/DeviceHub}"
+PREVIEW_SCRATCH_PATH="${PREVIEW_SCRATCH_PATH:-$DERIVED_DATA_PATH/SwiftPM/PreviewRenderer}"
 RUN_STARTED_AT="$(python3 -c 'from datetime import datetime; print(datetime.now().astimezone().isoformat(timespec="seconds"))')"
 
 DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
@@ -92,9 +94,7 @@ SWIFT_RUN_ARGUMENTS=(
   --disable-prefetching
   --force-resolved-versions
 )
-if [[ -n "${PREVIEW_SCRATCH_PATH:-}" ]]; then
-  SWIFT_RUN_ARGUMENTS+=(--scratch-path "$PREVIEW_SCRATCH_PATH")
-fi
+SWIFT_RUN_ARGUMENTS+=(--scratch-path "$PREVIEW_SCRATCH_PATH")
 
 swift test "${SWIFT_RUN_ARGUMENTS[@]}"
 swift run "${SWIFT_RUN_ARGUMENTS[@]}" \
