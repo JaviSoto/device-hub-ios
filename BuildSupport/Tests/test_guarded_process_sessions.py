@@ -22,6 +22,25 @@ from guarded_process_test_support import (
 
 
 class GuardedProcessSessionTests(GuardedProcessTestCase):
+    def test_preflight_reports_process_inspection_start_failure(self) -> None:
+        with (
+            mock.patch.object(
+                guarded_process,
+                "process_status_executable",
+                return_value=Path("/bin/ps"),
+            ),
+            mock.patch.object(
+                guarded_process.subprocess,
+                "run",
+                side_effect=PermissionError(1, "Operation not permitted", "/bin/ps"),
+            ),
+            mock.patch("sys.stderr") as stderr,
+        ):
+            status = guarded_process.main(["--preflight-process-inspection"])
+
+        self.assertEqual(status, 1)
+        self.assertIn("Operation not permitted", str(stderr.write.call_args_list))
+
     def test_test_service_cleanup_reports_the_inspection_failure(self) -> None:
         with (
             mock.patch.object(

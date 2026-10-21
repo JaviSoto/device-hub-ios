@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 "$ROOT/BuildSupport/guarded_process.py" --preflight-process-inspection
 PROCESS_GUARD="$ROOT/BuildSupport/process_guard.sh"
 # shellcheck source=BuildSupport/process_guard.sh
 source "$PROCESS_GUARD"
@@ -34,6 +35,7 @@ run_ci_task() {
     mise run "$@"
 }
 
+run_ci_task generate
 run_ci_task test
 run_ci_task protocol:verify
 run_ci_task lint

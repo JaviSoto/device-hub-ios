@@ -370,7 +370,7 @@ def process_session_members(
                 f"{PROCESS_INSPECTION_TIMEOUT_SECONDS:g} seconds"
             ) from error
         except OSError as error:
-            raise OSError("could not start process inspection") from error
+            raise OSError(f"could not start process inspection: {error}") from error
         if result.returncode != 0 and not (
             allow_no_match and result.returncode == 1 and not result.stdout
         ):
@@ -450,6 +450,20 @@ def process_session_members(
     ):
         raise OSError("process inspection omitted live session members")
     return tuple(members)
+
+
+def process_inspection_preflight() -> int:
+    """Check the same process inventory required by guarded build cleanup."""
+
+    try:
+        process_session_members(os.getsid(0))
+    except OSError as error:
+        print(
+            f"Device Hub CI requires process inspection before native builds: {error}.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 def signal_process_session_members(
@@ -1040,6 +1054,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
     """CLI entry point."""
 
     supplied_arguments = sys.argv[1:] if arguments is None else arguments
+    if (
+        supplied_arguments
+        and supplied_arguments[0] == "--preflight-process-inspection"
+    ):
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.parse_args(supplied_arguments[1:])
+        return process_inspection_preflight()
     if supplied_arguments and supplied_arguments[0] == "--watchdog":
         return watchdog_main(supplied_arguments[1:])
     if (

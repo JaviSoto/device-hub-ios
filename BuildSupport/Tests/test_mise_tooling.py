@@ -63,6 +63,17 @@ class MiseToolingContractTests(unittest.TestCase):
 
         self.assertEqual(1, script.count("run_ci_task protocol:verify"))
 
+    def test_full_ci_preflights_process_inspection_and_generates_project_first(self) -> None:
+        script = (ROOT / "ci" / "run_ci.sh").read_text()
+
+        preflight_index = script.index("--preflight-process-inspection")
+        guard_index = script.index("devicehub_require_guard full-ci")
+        generate_index = script.index("run_ci_task generate")
+        tests_index = script.index("run_ci_task test")
+
+        self.assertLess(preflight_index, guard_index)
+        self.assertLess(generate_index, tests_index)
+
     def test_lint_task_delegates_to_atomic_mise_tasks(self) -> None:
         configuration = tomllib.loads((ROOT / "mise.toml").read_text())
         steps = configuration["tasks"]["lint"]["run"]
